@@ -12,7 +12,7 @@ fn main() {
     let event_loop = glium::winit::event_loop::EventLoop::builder()
         .build()
         .expect("event loop to be built");
-    let (_window, display) = glium::backend::glutin::SimpleWindowBuilder::new()
+    let (window, display) = glium::backend::glutin::SimpleWindowBuilder::new()
         .with_title("Voxels")
         .build(&event_loop);
 
@@ -34,9 +34,12 @@ fn main() {
         #version 140
 
         in vec3 position;
+        uniform float offset;
 
         void main() {
-            gl_Position = vec4(position, 1.0);
+            vec3 pos = position;
+            pos.x += offset;
+            gl_Position = vec4(pos, 1.0);
         }
     "#;
 
@@ -54,18 +57,7 @@ fn main() {
         glium::Program::from_source(&display, vertex_shader_src, fragment_shader_src, None)
             .expect("to compile shaders");
 
-    let mut frame = display.draw();
-    frame.clear_color(1.0, 0.0, 1.0, 1.0);
-    frame
-        .draw(
-            &vertex_buffer,
-            &indices,
-            &program,
-            &glium::uniforms::EmptyUniforms,
-            &Default::default(),
-        )
-        .expect("to draw vertices");
-    frame.finish().expect("to finish drawing");
+    let mut time: f32 = 0.0;
 
     #[allow(deprecated)]
     event_loop
@@ -73,8 +65,32 @@ fn main() {
             match event {
                 glium::winit::event::Event::WindowEvent { event, .. } => match event {
                     glium::winit::event::WindowEvent::CloseRequested => window_target.exit(),
+                    glium::winit::event::WindowEvent::RedrawRequested => {
+                        time += 0.02;
+                        let offset = time.sin() * 0.5;
+                        let uniforms = uniform! { offset: offset };
+
+                        let mut frame = display.draw();
+                        frame.clear_color(1.0, 0.0, 1.0, 1.0);
+                        frame
+                            .draw(
+                                &vertex_buffer,
+                                &indices,
+                                &program,
+                                &uniforms,
+                                &Default::default(),
+                            )
+                            .expect("to draw vertices");
+                        frame.finish().expect("to finish drawing");
+                    }
+                    glium::winit::event::WindowEvent::Resized(window_size) => {
+                        display.resize(window_size.into());
+                    }
                     _ => (),
                 },
+                glium::winit::event::Event::AboutToWait => {
+                    window.request_redraw();
+                }
                 _ => (),
             };
         })
