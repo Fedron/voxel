@@ -5,8 +5,9 @@ use glium::Surface;
 #[derive(Copy, Clone)]
 struct Vertex {
     position: [f32; 3],
+    color: [f32; 3],
 }
-implement_vertex!(Vertex, position);
+implement_vertex!(Vertex, position, color);
 
 fn main() {
     let event_loop = glium::winit::event_loop::EventLoop::builder()
@@ -19,12 +20,15 @@ fn main() {
     let triangle = vec![
         Vertex {
             position: [-0.5, -0.5, 0.0],
+            color: [1.0, 0.0, 0.0],
         },
         Vertex {
             position: [0.0, 0.5, 0.0],
+            color: [0.0, 1.0, 0.0],
         },
         Vertex {
             position: [0.5, -0.5, 0.0],
+            color: [0.0, 0.0, 1.0],
         },
     ];
     let vertex_buffer = glium::VertexBuffer::new(&display, &triangle).unwrap();
@@ -34,11 +38,17 @@ fn main() {
         #version 140
 
         in vec3 position;
+        in vec3 color;
+
+        out vec3 vertex_color;
+
         uniform float offset;
 
         void main() {
             vec3 pos = position;
             pos.x += offset;
+
+            vertex_color = color;
             gl_Position = vec4(pos, 1.0);
         }
     "#;
@@ -46,10 +56,11 @@ fn main() {
     let fragment_shader_src = r#"
         #version 140
 
+        in vec3 vertex_color;
         out vec4 color;
 
         void main() {
-            color = vec4(0.0, 1.0, 1.0, 1.0);
+            color = vec4(vertex_color, 1.0);
         }
     "#;
 
