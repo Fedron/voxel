@@ -1,13 +1,11 @@
 #[macro_use]
 extern crate glium;
 use glium::Surface;
+use mesh::Mesh;
+use quad::QuadFace;
 
-#[derive(Copy, Clone)]
-struct Vertex {
-    position: [f32; 3],
-    color: [f32; 3],
-}
-implement_vertex!(Vertex, position, color);
+mod mesh;
+mod quad;
 
 fn main() {
     let event_loop = glium::winit::event_loop::EventLoop::builder()
@@ -17,22 +15,15 @@ fn main() {
         .with_title("Voxels")
         .build(&event_loop);
 
-    let triangle = vec![
-        Vertex {
-            position: [-0.5, -0.5, 0.0],
-            color: [1.0, 0.0, 0.0],
-        },
-        Vertex {
-            position: [0.0, 0.5, 0.0],
-            color: [0.0, 1.0, 0.0],
-        },
-        Vertex {
-            position: [0.5, -0.5, 0.0],
-            color: [0.0, 0.0, 1.0],
-        },
-    ];
-    let vertex_buffer = glium::VertexBuffer::new(&display, &triangle).unwrap();
-    let indices = glium::index::NoIndices(glium::index::PrimitiveType::TrianglesList);
+    let quad: Mesh<4, 6> = QuadFace::Front.as_mesh(Default::default());
+    let vertex_buffer =
+        glium::VertexBuffer::new(&display, &quad.vertices).expect("to create vertex buffer");
+    let indices = glium::index::IndexBuffer::new(
+        &display,
+        glium::index::PrimitiveType::TrianglesList,
+        &quad.indices,
+    )
+    .expect("to create index buffer");
 
     let vertex_shader_src = r#"
         #version 140
