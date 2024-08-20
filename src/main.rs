@@ -1,11 +1,15 @@
 #[macro_use]
 extern crate glium;
+use camera::Camera;
 use glium::Surface;
 use mesh::Mesh;
 use quad::QuadFace;
+use utils::degrees_to_radians;
 
+mod camera;
 mod mesh;
 mod quad;
+mod utils;
 
 fn main() {
     let event_loop = glium::winit::event_loop::EventLoop::builder()
@@ -14,6 +18,17 @@ fn main() {
     let (window, display) = glium::backend::glutin::SimpleWindowBuilder::new()
         .with_title("Voxels")
         .build(&event_loop);
+    let window_size = window.inner_size();
+
+    let camera = Camera {
+        eye: (0.0, 0.0, 10.0).into(),
+        target: glam::Vec3::ZERO,
+        up: glam::Vec3::Y,
+        aspect: window_size.width as f32 / window_size.height as f32,
+        fovy: degrees_to_radians(45.0),
+        near_plane: 0.1,
+        far_plane: 1000.0,
+    };
 
     let quad: Mesh<4, 6> = QuadFace::Front.as_mesh(Default::default());
     let vertex_buffer =
@@ -33,8 +48,6 @@ fn main() {
     )
     .expect("to compile shaders");
 
-    let mut time: f32 = 0.0;
-
     #[allow(deprecated)]
     event_loop
         .run(move |event, window_target| {
@@ -42,9 +55,7 @@ fn main() {
                 glium::winit::event::Event::WindowEvent { event, .. } => match event {
                     glium::winit::event::WindowEvent::CloseRequested => window_target.exit(),
                     glium::winit::event::WindowEvent::RedrawRequested => {
-                        time += 0.02;
-                        let offset = time.sin() * 0.5;
-                        let uniforms = uniform! { offset: offset };
+                        let view_proj = camera.build_view_projection_matrix().to_cols_array_2d();
 
                         let mut frame = display.draw();
                         frame.clear_color(1.0, 0.0, 1.0, 1.0);
@@ -53,7 +64,7 @@ fn main() {
                                 &vertex_buffer,
                                 &indices,
                                 &program,
-                                &uniforms,
+                                &uniform! { view_proj: view_proj},
                                 &Default::default(),
                             )
                             .expect("to draw vertices");
