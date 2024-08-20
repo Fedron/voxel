@@ -1,15 +1,23 @@
 #[macro_use]
 extern crate glium;
 use camera::Camera;
-use glium::Surface;
+use glium::{
+    winit::{
+        event::{Event, WindowEvent},
+        keyboard::KeyCode,
+        platform::{pump_events::EventLoopExtPumpEvents, run_on_demand::EventLoopExtRunOnDemand},
+    },
+    Surface,
+};
 use mesh::Mesh;
 use quad::QuadFace;
-use utils::degrees_to_radians;
 
 mod camera;
 mod mesh;
 mod quad;
-mod utils;
+
+const CAMERA_MOVE_SPEED: f32 = 10.0;
+const MOUSE_SENSITIVITY: f32 = 0.2;
 
 fn main() {
     let event_loop = glium::winit::event_loop::EventLoop::builder()
@@ -18,17 +26,6 @@ fn main() {
     let (window, display) = glium::backend::glutin::SimpleWindowBuilder::new()
         .with_title("Voxels")
         .build(&event_loop);
-    let window_size = window.inner_size();
-
-    let camera = Camera {
-        eye: (0.0, 0.0, 10.0).into(),
-        target: glam::Vec3::ZERO,
-        up: glam::Vec3::Y,
-        aspect: window_size.width as f32 / window_size.height as f32,
-        fovy: degrees_to_radians(45.0),
-        near_plane: 0.1,
-        far_plane: 1000.0,
-    };
 
     let quad: Mesh<4, 6> = QuadFace::Front.as_mesh(Default::default());
     let vertex_buffer =
@@ -48,14 +45,26 @@ fn main() {
     )
     .expect("to compile shaders");
 
+    let mut camera = Camera::new((0.0, 0.0, 5.0).into());
+
+    let mut last_mouse_position = glam::vec2(0.0, 0.0);
+    let mut is_first_mouse = true;
+
     #[allow(deprecated)]
     event_loop
         .run(move |event, window_target| {
             match event {
-                glium::winit::event::Event::WindowEvent { event, .. } => match event {
-                    glium::winit::event::WindowEvent::CloseRequested => window_target.exit(),
-                    glium::winit::event::WindowEvent::RedrawRequested => {
-                        let view_proj = camera.build_view_projection_matrix().to_cols_array_2d();
+                Event::WindowEvent { event, .. } => match event {
+                    WindowEvent::CloseRequested => window_target.exit(),
+                    WindowEvent::RedrawRequested => {
+                        let window_size = window.inner_size();
+                        let projection = glam::Mat4::perspective_rh(
+                            camera.aspect.to_radians(),
+                            window_size.width as f32 / window_size.height as f32,
+                            0.1,
+                            1000.0,
+                        );
+                        let view_proj = (projection * camera.view_matrix()).to_cols_array_2d();
 
                         let mut frame = display.draw();
                         frame.clear_color(1.0, 0.0, 1.0, 1.0);
@@ -70,16 +79,64 @@ fn main() {
                             .expect("to draw vertices");
                         frame.finish().expect("to finish drawing");
                     }
-                    glium::winit::event::WindowEvent::Resized(window_size) => {
+                    WindowEvent::Resized(window_size) => {
                         display.resize(window_size.into());
                     }
+                    WindowEvent::KeyboardInput { event, .. } => match event.physical_key {
+                        glium::winit::keyboard::PhysicalKey::Code(key) => match key {
+                            KeyCode::Escape => window_target.exit(),
+                            KeyCode::KeyW => camera.process_movement(
+                                camera::MoveDirection::Forward,
+                                CAMERA_MOVE_SPEED,
+                            ),
+                            KeyCode::KeyA => camera
+                                .process_movement(camera::MoveDirection::Left, CAMERA_MOVE_SPEED),
+                            KeyCode::KeyS => camera.process_movement(
+                                camera::MoveDirection::Backward,
+                                CAMERA_MOVE_SPEED,
+                            ),
+                            KeyCode::KeyD => camera
+                                .process_movement(camera::MoveDirection::Right, CAMERA_MOVE_SPEED),
+                            KeyCode::Space => camera
+                                .process_movement(camera::MoveDirection::Up, CAMERA_MOVE_SPEED),
+                            KeyCode::ShiftLeft => camera
+                                .process_movement(camera::MoveDirection::Down, CAMERA_MOVE_SPEED),
+                            _ => (),
+                        },
+                        _ => (),
+                    },
+                    WindowEvent::CursorMoved { position, .. } => {
+                        if is_first_mouse {
+                            last_mouse_position.x = position.x as f32;
+                            last_mouse_position.y = position.y as f32;
+                            is_first_mouse = false;
+                        }
+
+                        let x_offset = position.x as f32 - last_mouse_position.x;
+                        let y_offset = last_mouse_position.y - position.y as f32;
+
+                        last_mouse_position.x = position.x as f32;
+                        last_mouse_position.y = position.y as f32;
+
+                        camera.process_mouse(
+                            x_offset * MOUSE_SENSITIVITY,
+                            y_offset * MOUSE_SENSITIVITY,
+                        );
+                    }
+                    WindowEvent::MouseWheel { delta, .. } => match delta {
+                        glium::winit::event::MouseScrollDelta::LineDelta(_, y_offset) => {
+                            camera.aspect -= y_offset;
+                            camera.aspect = camera.aspect.clamp(1.0, 45.0);
+                        }
+                        _ => {}
+                    },
                     _ => (),
                 },
-                glium::winit::event::Event::AboutToWait => {
+                Event::AboutToWait => {
                     window.request_redraw();
                 }
                 _ => (),
             };
         })
-        .unwrap();
+        .expect("to run event loop");
 }
