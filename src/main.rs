@@ -25,39 +25,13 @@ fn main() {
     )
     .expect("to create index buffer");
 
-    let vertex_shader_src = r#"
-        #version 140
-
-        in vec3 position;
-        in vec3 color;
-
-        out vec3 vertex_color;
-
-        uniform float offset;
-
-        void main() {
-            vec3 pos = position;
-            pos.x += offset;
-
-            vertex_color = color;
-            gl_Position = vec4(pos, 1.0);
-        }
-    "#;
-
-    let fragment_shader_src = r#"
-        #version 140
-
-        in vec3 vertex_color;
-        out vec4 color;
-
-        void main() {
-            color = vec4(vertex_color, 1.0);
-        }
-    "#;
-
-    let program =
-        glium::Program::from_source(&display, vertex_shader_src, fragment_shader_src, None)
-            .expect("to compile shaders");
+    let program = glium::Program::from_source(
+        &display,
+        include_str!("shaders/shader.vert"),
+        include_str!("shaders/shader.frag"),
+        None,
+    )
+    .expect("to compile shaders");
 
     let mut time: f32 = 0.0;
 
