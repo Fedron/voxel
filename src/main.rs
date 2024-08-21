@@ -1,11 +1,10 @@
 #[macro_use]
 extern crate glium;
-use camera::Camera;
+use camera::{Camera, CameraController, Projection};
 use glium::{
     winit::{
-        event::{Event, WindowEvent},
-        keyboard::KeyCode,
-        platform::{pump_events::EventLoopExtPumpEvents, run_on_demand::EventLoopExtRunOnDemand},
+        event::{DeviceEvent, ElementState, Event, KeyEvent, WindowEvent},
+        keyboard::{KeyCode, PhysicalKey},
     },
     Surface,
 };
@@ -16,16 +15,20 @@ mod camera;
 mod mesh;
 mod quad;
 
-const CAMERA_MOVE_SPEED: f32 = 10.0;
-const MOUSE_SENSITIVITY: f32 = 0.2;
-
 fn main() {
     let event_loop = glium::winit::event_loop::EventLoop::builder()
         .build()
         .expect("event loop to be built");
     let (window, display) = glium::backend::glutin::SimpleWindowBuilder::new()
         .with_title("Voxels")
+        .with_inner_size(1280, 720)
         .build(&event_loop);
+
+    window
+        .set_cursor_grab(glium::winit::window::CursorGrabMode::Locked)
+        .or_else(|_| window.set_cursor_grab(glium::winit::window::CursorGrabMode::Confined))
+        .expect("to lock cursor to window");
+    window.set_cursor_visible(false);
 
     let quad: Mesh<4, 6> = QuadFace::Front.as_mesh(Default::default());
     let vertex_buffer =
@@ -45,26 +48,45 @@ fn main() {
     )
     .expect("to compile shaders");
 
-    let mut camera = Camera::new((0.0, 0.0, 5.0).into());
+    let mut camera = Camera::new(glam::vec3(0.0, 0.0, 3.0), -90.0, 0.0);
+    let mut camera_controller = CameraController::new(10.0, 0.5);
 
-    let mut last_mouse_position = glam::vec2(0.0, 0.0);
-    let mut is_first_mouse = true;
+    let mut projection = {
+        let window_size = window.inner_size();
+        Projection::new(
+            window_size.width as f32 / window_size.height as f32,
+            45.0,
+            0.1,
+            1000.0,
+        )
+    };
+
+    let mut last_frame_time = std::time::Instant::now();
 
     #[allow(deprecated)]
     event_loop
         .run(move |event, window_target| {
             match event {
                 Event::WindowEvent { event, .. } => match event {
-                    WindowEvent::CloseRequested => window_target.exit(),
+                    WindowEvent::CloseRequested
+                    | WindowEvent::KeyboardInput {
+                        event:
+                            KeyEvent {
+                                state: ElementState::Pressed,
+                                physical_key: PhysicalKey::Code(KeyCode::Escape),
+                                ..
+                            },
+                        ..
+                    } => window_target.exit(),
                     WindowEvent::RedrawRequested => {
-                        let window_size = window.inner_size();
-                        let projection = glam::Mat4::perspective_rh(
-                            camera.aspect.to_radians(),
-                            window_size.width as f32 / window_size.height as f32,
-                            0.1,
-                            1000.0,
-                        );
-                        let view_proj = (projection * camera.view_matrix()).to_cols_array_2d();
+                        let current_time = std::time::Instant::now();
+                        let delta_time = current_time.duration_since(last_frame_time);
+                        last_frame_time = current_time;
+
+                        camera_controller.update_camera(&mut camera, delta_time.as_secs_f32());
+
+                        let view_proj =
+                            (projection.matrix() * camera.view_matrix()).to_cols_array_2d();
 
                         let mut frame = display.draw();
                         frame.clear_color(1.0, 0.0, 1.0, 1.0);
@@ -81,57 +103,23 @@ fn main() {
                     }
                     WindowEvent::Resized(window_size) => {
                         display.resize(window_size.into());
+                        projection.resize(window_size.width as f32, window_size.height as f32);
                     }
-                    WindowEvent::KeyboardInput { event, .. } => match event.physical_key {
-                        glium::winit::keyboard::PhysicalKey::Code(key) => match key {
-                            KeyCode::Escape => window_target.exit(),
-                            KeyCode::KeyW => camera.process_movement(
-                                camera::MoveDirection::Forward,
-                                CAMERA_MOVE_SPEED,
-                            ),
-                            KeyCode::KeyA => camera
-                                .process_movement(camera::MoveDirection::Left, CAMERA_MOVE_SPEED),
-                            KeyCode::KeyS => camera.process_movement(
-                                camera::MoveDirection::Backward,
-                                CAMERA_MOVE_SPEED,
-                            ),
-                            KeyCode::KeyD => camera
-                                .process_movement(camera::MoveDirection::Right, CAMERA_MOVE_SPEED),
-                            KeyCode::Space => camera
-                                .process_movement(camera::MoveDirection::Up, CAMERA_MOVE_SPEED),
-                            KeyCode::ShiftLeft => camera
-                                .process_movement(camera::MoveDirection::Down, CAMERA_MOVE_SPEED),
-                            _ => (),
-                        },
-                        _ => (),
-                    },
-                    WindowEvent::CursorMoved { position, .. } => {
-                        if is_first_mouse {
-                            last_mouse_position.x = position.x as f32;
-                            last_mouse_position.y = position.y as f32;
-                            is_first_mouse = false;
-                        }
-
-                        let x_offset = position.x as f32 - last_mouse_position.x;
-                        let y_offset = last_mouse_position.y - position.y as f32;
-
-                        last_mouse_position.x = position.x as f32;
-                        last_mouse_position.y = position.y as f32;
-
-                        camera.process_mouse(
-                            x_offset * MOUSE_SENSITIVITY,
-                            y_offset * MOUSE_SENSITIVITY,
-                        );
-                    }
-                    WindowEvent::MouseWheel { delta, .. } => match delta {
-                        glium::winit::event::MouseScrollDelta::LineDelta(_, y_offset) => {
-                            camera.aspect -= y_offset;
-                            camera.aspect = camera.aspect.clamp(1.0, 45.0);
-                        }
-                        _ => {}
-                    },
+                    WindowEvent::KeyboardInput {
+                        event:
+                            KeyEvent {
+                                physical_key: PhysicalKey::Code(key),
+                                state,
+                                ..
+                            },
+                        ..
+                    } => camera_controller.process_keyboard(key, state),
                     _ => (),
                 },
+                Event::DeviceEvent {
+                    event: DeviceEvent::MouseMotion { delta },
+                    ..
+                } => camera_controller.process_mouse(delta.0 as f32, delta.1 as f32),
                 Event::AboutToWait => {
                     window.request_redraw();
                 }
