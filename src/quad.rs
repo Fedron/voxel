@@ -31,8 +31,8 @@ pub enum QuadFace {
 impl Into<glam::IVec3> for QuadFace {
     fn into(self) -> glam::IVec3 {
         match self {
-            QuadFace::Front => glam::IVec3::Z,
-            QuadFace::Back => glam::IVec3::NEG_Z,
+            QuadFace::Front => glam::IVec3::NEG_Z,
+            QuadFace::Back => glam::IVec3::Z,
             QuadFace::Top => glam::IVec3::Y,
             QuadFace::Bottom => glam::IVec3::NEG_Y,
             QuadFace::Left => glam::IVec3::NEG_X,
@@ -93,10 +93,10 @@ impl QuadFace {
             },
             QuadFace::Bottom => Mesh {
                 vertices: vec![
-                    create_vertex(QuadVertex::BackBottomLeft),
                     create_vertex(QuadVertex::BackBottomRight),
-                    create_vertex(QuadVertex::FrontBottomRight),
+                    create_vertex(QuadVertex::BackBottomLeft),
                     create_vertex(QuadVertex::FrontBottomLeft),
+                    create_vertex(QuadVertex::FrontBottomRight),
                 ],
                 indices,
             },
