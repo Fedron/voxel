@@ -12,7 +12,7 @@ pub enum Voxel {
     Stone,
 }
 
-const CHUNK_SIZE: glam::UVec3 = glam::uvec3(16, 16, 16);
+pub const CHUNK_SIZE: glam::UVec3 = glam::uvec3(16, 16, 16);
 
 pub struct Chunk {
     _position: glam::UVec3,

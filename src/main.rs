@@ -1,7 +1,8 @@
 #[macro_use]
 extern crate glium;
 use camera::{Camera, CameraController, Projection};
-use chunk::{Chunk, ChunkMesher};
+use chunk::{ChunkMesher, CHUNK_SIZE};
+use generator::WorldGenerator;
 use glium::{
     winit::{
         event::{DeviceEvent, ElementState, Event, KeyEvent, WindowEvent},
@@ -12,6 +13,7 @@ use glium::{
 
 mod camera;
 mod chunk;
+mod generator;
 mod mesh;
 mod quad;
 mod utils;
@@ -52,15 +54,15 @@ fn main() {
         )
     };
 
-    let mut chunk = Chunk::new(glam::UVec3::ZERO);
-    chunk.set_voxel(glam::uvec3(1, 0, 0), chunk::Voxel::Stone);
-    chunk.set_voxel(glam::uvec3(1, 0, 1), chunk::Voxel::Stone);
-    chunk.set_voxel(glam::uvec3(1, 1, 1), chunk::Voxel::Stone);
-    chunk.set_voxel(glam::uvec3(1, 0, 2), chunk::Voxel::Stone);
-    chunk.set_voxel(glam::uvec3(1, 0, 4), chunk::Voxel::Stone);
-    chunk.set_voxel(glam::uvec3(4, 4, 4), chunk::Voxel::Stone);
+    let world_generator = WorldGenerator::builder()
+        .seed(1337)
+        .chunk_size(CHUNK_SIZE)
+        .max_world_height(CHUNK_SIZE.y)
+        .build();
 
+    let chunk = world_generator.generate_chunk(glam::uvec3(0, 0, 0));
     let chunk_mesh = ChunkMesher::mesh(&chunk);
+
     let vertex_buffer =
         glium::VertexBuffer::new(&display, &chunk_mesh.vertices).expect("to create vertex buffer");
     let indices = glium::index::IndexBuffer::new(
