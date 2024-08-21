@@ -6,7 +6,7 @@ use glium::{
         event::{DeviceEvent, ElementState, Event, KeyEvent, WindowEvent},
         keyboard::{KeyCode, PhysicalKey},
     },
-    Surface,
+    DrawParameters, Surface,
 };
 use mesh::Mesh;
 use quad::QuadFace;
@@ -96,7 +96,11 @@ fn main() {
                                 &indices,
                                 &program,
                                 &uniform! { view_proj: view_proj},
-                                &Default::default(),
+                                &DrawParameters {
+                                    backface_culling:
+                                        glium::draw_parameters::BackfaceCullingMode::CullCounterClockwise,
+                                    ..Default::default()
+                                },
                             )
                             .expect("to draw vertices");
                         frame.finish().expect("to finish drawing");
