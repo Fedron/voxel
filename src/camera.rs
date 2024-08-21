@@ -60,7 +60,8 @@ pub struct CameraController {
     amount_down: f32,
     rotate_horizontal: f32,
     rotate_vertical: f32,
-    speed: f32,
+    current_speed: f32,
+    original_speed: f32,
     sensitivity: f32,
 }
 
@@ -75,12 +76,21 @@ impl CameraController {
             amount_down: 0.0,
             rotate_horizontal: 0.0,
             rotate_vertical: 0.0,
-            speed,
+            current_speed: speed,
+            original_speed: speed,
             sensitivity,
         }
     }
 
     pub fn process_keyboard(&mut self, key: KeyCode, state: ElementState) {
+        if key == KeyCode::ControlLeft {
+            self.current_speed = if state == ElementState::Pressed {
+                self.original_speed * 4.0
+            } else {
+                self.original_speed
+            };
+        }
+
         let amount = if state == ElementState::Pressed {
             1.0
         } else {
@@ -123,7 +133,7 @@ impl CameraController {
         .normalize();
         let right = front.cross(glam::Vec3::Y).normalize();
 
-        let move_speed = self.speed * delta_time;
+        let move_speed = self.current_speed * delta_time;
         let rotate_speed = self.sensitivity * delta_time;
 
         camera.position += front * (self.amount_forward - self.amount_backward) * move_speed;
