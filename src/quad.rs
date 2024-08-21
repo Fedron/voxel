@@ -18,6 +18,7 @@ impl Default for QuadFaceOptions {
     }
 }
 
+#[derive(Debug, Clone, Copy, num_derive::FromPrimitive)]
 pub enum QuadFace {
     Front,
     Back,
@@ -27,9 +28,22 @@ pub enum QuadFace {
     Right,
 }
 
+impl Into<glam::IVec3> for QuadFace {
+    fn into(self) -> glam::IVec3 {
+        match self {
+            QuadFace::Front => glam::IVec3::Z,
+            QuadFace::Back => glam::IVec3::NEG_Z,
+            QuadFace::Top => glam::IVec3::Y,
+            QuadFace::Bottom => glam::IVec3::NEG_Y,
+            QuadFace::Left => glam::IVec3::NEG_X,
+            QuadFace::Right => glam::IVec3::X,
+        }
+    }
+}
+
 impl QuadFace {
-    pub fn as_mesh(&self, options: QuadFaceOptions) -> Mesh<4, 6> {
-        let indices = [
+    pub fn as_mesh(&self, options: QuadFaceOptions) -> Mesh {
+        let indices = vec![
             options.base_index,
             options.base_index + 1,
             options.base_index + 3,
@@ -51,7 +65,7 @@ impl QuadFace {
 
         match self {
             QuadFace::Front => Mesh {
-                vertices: [
+                vertices: vec![
                     create_vertex(QuadVertex::FrontTopLeft),
                     create_vertex(QuadVertex::FrontTopRight),
                     create_vertex(QuadVertex::FrontBottomRight),
@@ -60,7 +74,7 @@ impl QuadFace {
                 indices,
             },
             QuadFace::Back => Mesh {
-                vertices: [
+                vertices: vec![
                     create_vertex(QuadVertex::BackTopLeft),
                     create_vertex(QuadVertex::BackTopRight),
                     create_vertex(QuadVertex::BackBottomRight),
@@ -69,7 +83,7 @@ impl QuadFace {
                 indices,
             },
             QuadFace::Top => Mesh {
-                vertices: [
+                vertices: vec![
                     create_vertex(QuadVertex::BackTopLeft),
                     create_vertex(QuadVertex::BackTopRight),
                     create_vertex(QuadVertex::FrontTopRight),
@@ -78,7 +92,7 @@ impl QuadFace {
                 indices,
             },
             QuadFace::Bottom => Mesh {
-                vertices: [
+                vertices: vec![
                     create_vertex(QuadVertex::BackBottomLeft),
                     create_vertex(QuadVertex::BackBottomRight),
                     create_vertex(QuadVertex::FrontBottomRight),
@@ -87,7 +101,7 @@ impl QuadFace {
                 indices,
             },
             QuadFace::Left => Mesh {
-                vertices: [
+                vertices: vec![
                     create_vertex(QuadVertex::BackTopLeft),
                     create_vertex(QuadVertex::FrontTopLeft),
                     create_vertex(QuadVertex::FrontBottomLeft),
@@ -96,7 +110,7 @@ impl QuadFace {
                 indices,
             },
             QuadFace::Right => Mesh {
-                vertices: [
+                vertices: vec![
                     create_vertex(QuadVertex::FrontTopRight),
                     create_vertex(QuadVertex::BackTopRight),
                     create_vertex(QuadVertex::BackBottomRight),

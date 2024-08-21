@@ -5,7 +5,7 @@ pub struct Vertex {
 }
 implement_vertex!(Vertex, position, color);
 
-pub struct Mesh<const V: usize, const I: usize> {
-    pub vertices: [Vertex; V],
-    pub indices: [u32; I],
+pub struct Mesh {
+    pub vertices: Vec<Vertex>,
+    pub indices: Vec<u32>,
 }

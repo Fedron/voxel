@@ -1,6 +1,7 @@
 #[macro_use]
 extern crate glium;
 use camera::{Camera, CameraController, Projection};
+use chunk::{Chunk, ChunkMesher};
 use glium::{
     winit::{
         event::{DeviceEvent, ElementState, Event, KeyEvent, WindowEvent},
@@ -8,12 +9,12 @@ use glium::{
     },
     DrawParameters, Surface,
 };
-use mesh::Mesh;
-use quad::QuadFace;
 
 mod camera;
+mod chunk;
 mod mesh;
 mod quad;
+mod utils;
 
 fn main() {
     let event_loop = glium::winit::event_loop::EventLoop::builder()
@@ -29,16 +30,6 @@ fn main() {
         .or_else(|_| window.set_cursor_grab(glium::winit::window::CursorGrabMode::Confined))
         .expect("to lock cursor to window");
     window.set_cursor_visible(false);
-
-    let quad: Mesh<4, 6> = QuadFace::Front.as_mesh(Default::default());
-    let vertex_buffer =
-        glium::VertexBuffer::new(&display, &quad.vertices).expect("to create vertex buffer");
-    let indices = glium::index::IndexBuffer::new(
-        &display,
-        glium::index::PrimitiveType::TrianglesList,
-        &quad.indices,
-    )
-    .expect("to create index buffer");
 
     let program = glium::Program::from_source(
         &display,
@@ -60,6 +51,19 @@ fn main() {
             1000.0,
         )
     };
+
+    let mut chunk = Chunk::new(glam::UVec3::ZERO);
+    chunk.set_voxel(glam::uvec3(0, 0, 0), chunk::Voxel::Stone);
+
+    let chunk_mesh = ChunkMesher::mesh(&chunk);
+    let vertex_buffer =
+        glium::VertexBuffer::new(&display, &chunk_mesh.vertices).expect("to create vertex buffer");
+    let indices = glium::index::IndexBuffer::new(
+        &display,
+        glium::index::PrimitiveType::TrianglesList,
+        &chunk_mesh.indices,
+    )
+    .expect("to create index buffer");
 
     let mut last_frame_time = std::time::Instant::now();
 
@@ -98,7 +102,7 @@ fn main() {
                                 &uniform! { view_proj: view_proj},
                                 &DrawParameters {
                                     backface_culling:
-                                        glium::draw_parameters::BackfaceCullingMode::CullCounterClockwise,
+                                        glium::draw_parameters::BackfaceCullingMode::CullClockwise,
                                     ..Default::default()
                                 },
                             )
