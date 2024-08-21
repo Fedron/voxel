@@ -93,7 +93,7 @@ fn main() {
                             (projection.matrix() * camera.view_matrix()).to_cols_array_2d();
 
                         let mut frame = display.draw();
-                        frame.clear_color(1.0, 0.0, 1.0, 1.0);
+                        frame.clear_color(0.0, 0.45, 0.74, 1.0);
                         frame
                             .draw(
                                 &vertex_buffer,
