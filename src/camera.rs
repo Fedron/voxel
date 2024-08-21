@@ -122,14 +122,13 @@ impl CameraController {
         )
         .normalize();
         let right = front.cross(glam::Vec3::Y).normalize();
-        let up = right.cross(front).normalize();
 
         let move_speed = self.speed * delta_time;
         let rotate_speed = self.sensitivity * delta_time;
 
         camera.position += front * (self.amount_forward - self.amount_backward) * move_speed;
         camera.position += right * (self.amount_right - self.amount_left) * move_speed;
-        camera.position += up * (self.amount_up - self.amount_down) * move_speed;
+        camera.position += glam::Vec3::Y * (self.amount_up - self.amount_down) * move_speed;
 
         camera.yaw += self.rotate_horizontal * rotate_speed;
         camera.pitch += self.rotate_vertical * rotate_speed;

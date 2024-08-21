@@ -84,19 +84,17 @@ impl ChunkMesher {
                         Self::check_voxel_neighbours(chunk, index_to_coord(index, CHUNK_SIZE));
                     for i in 0..6 {
                         if neighbours & (1 << i) == 0 {
-                            let quad_face = QuadFace::from_i64(i as i64)
-                                .expect("to convert primitive to quad face enum");
-                            println!("{:?}", quad_face);
-
                             let position = index_to_coord(index, CHUNK_SIZE);
                             let base_position =
                                 glam::vec3(position.x as f32, position.y as f32, position.z as f32);
-                            let mesh = quad_face.as_mesh(QuadFaceOptions {
-                                base_position: base_position.into(),
-                                half_size: 0.5,
-                                color: [0.5, 0.5, 0.5],
-                                base_index: vertices.len() as u32,
-                            });
+                            let mesh = QuadFace::from_i64(i as i64)
+                                .expect("to convert primitive to quad face enum")
+                                .as_mesh(QuadFaceOptions {
+                                    base_position: base_position.into(),
+                                    half_size: 0.5,
+                                    color: [0.5, 0.5, 0.5],
+                                    base_index: vertices.len() as u32,
+                                });
                             vertices.extend(mesh.vertices);
                             indices.extend(mesh.indices);
                         }

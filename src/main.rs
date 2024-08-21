@@ -53,7 +53,11 @@ fn main() {
     };
 
     let mut chunk = Chunk::new(glam::UVec3::ZERO);
-    chunk.set_voxel(glam::uvec3(0, 0, 0), chunk::Voxel::Stone);
+    chunk.set_voxel(glam::uvec3(1, 0, 0), chunk::Voxel::Stone);
+    chunk.set_voxel(glam::uvec3(1, 0, 1), chunk::Voxel::Stone);
+    chunk.set_voxel(glam::uvec3(1, 1, 1), chunk::Voxel::Stone);
+    chunk.set_voxel(glam::uvec3(1, 0, 2), chunk::Voxel::Stone);
+    chunk.set_voxel(glam::uvec3(1, 0, 4), chunk::Voxel::Stone);
 
     let chunk_mesh = ChunkMesher::mesh(&chunk);
     let vertex_buffer =

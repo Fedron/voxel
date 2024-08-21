@@ -75,10 +75,10 @@ impl QuadFace {
             },
             QuadFace::Back => Mesh {
                 vertices: vec![
-                    create_vertex(QuadVertex::BackTopLeft),
                     create_vertex(QuadVertex::BackTopRight),
-                    create_vertex(QuadVertex::BackBottomRight),
+                    create_vertex(QuadVertex::BackTopLeft),
                     create_vertex(QuadVertex::BackBottomLeft),
+                    create_vertex(QuadVertex::BackBottomRight),
                 ],
                 indices,
             },
