@@ -41,6 +41,13 @@ impl Into<glam::IVec3> for QuadFace {
     }
 }
 
+impl Into<[f32; 3]> for QuadFace {
+    fn into(self) -> [f32; 3] {
+        let normal: glam::IVec3 = self.into();
+        [normal.x as f32, normal.y as f32, normal.z as f32]
+    }
+}
+
 impl QuadFace {
     pub fn as_mesh(&self, options: QuadFaceOptions) -> Mesh {
         let indices = vec![
@@ -59,6 +66,7 @@ impl QuadFace {
                     position[1] * options.half_size + options.base_position[1],
                     position[2] * options.half_size + options.base_position[2],
                 ],
+                normal: (*self).into(),
                 color: options.color,
             }
         };

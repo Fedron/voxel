@@ -99,6 +99,9 @@ fn main() {
                         let view_proj =
                             (projection.matrix() * camera.view_matrix()).to_cols_array_2d();
 
+                        let light_color: [f32; 3] = [1.0, 1.0, 1.0];
+                        let light_position: [f32; 3] = [20.0, 20.0, 20.0];
+
                         let mut frame = display.draw();
                         frame.clear_color(0.0, 0.45, 0.74, 1.0);
                         frame
@@ -106,7 +109,11 @@ fn main() {
                                 &vertex_buffer,
                                 &indices,
                                 &program,
-                                &uniform! { view_proj: view_proj},
+                                &uniform! {
+                                    view_proj: view_proj,
+                                    light_color: light_color,
+                                    light_position: light_position
+                                },
                                 &DrawParameters {
                                     backface_culling:
                                         glium::draw_parameters::BackfaceCullingMode::CullClockwise,
