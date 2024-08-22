@@ -31,6 +31,10 @@ impl Chunk {
     }
 
     pub fn get_voxel(&self, position: glam::UVec3) -> Option<&Voxel> {
+        if position.x >= CHUNK_SIZE.x || position.y >= CHUNK_SIZE.y || position.z >= CHUNK_SIZE.z {
+            return None;
+        }
+
         let index = coord_to_index(position, CHUNK_SIZE);
         self.voxels.get(index)
     }
@@ -80,10 +84,13 @@ impl ChunkMesher {
         for (voxel, index) in chunk.iter() {
             match voxel {
                 Voxel::Stone => {
-                    let neighbours =
-                        Self::check_voxel_neighbours(chunk, index_to_coord(index, CHUNK_SIZE));
+                    let neighbours = Self::get_neighbouring_voxels(
+                        chunk,
+                        index_to_coord(index, CHUNK_SIZE),
+                        Voxel::Air,
+                    );
                     for i in 0..6 {
-                        if neighbours & (1 << i) == 0 {
+                        if (neighbours >> i) & 1 == 1 {
                             let position = index_to_coord(index, CHUNK_SIZE);
                             let base_position =
                                 glam::vec3(position.x as f32, position.y as f32, position.z as f32);
@@ -107,15 +114,15 @@ impl ChunkMesher {
         Mesh { vertices, indices }
     }
 
-    fn check_voxel_neighbours(chunk: &Chunk, position: glam::UVec3) -> u8 {
+    fn get_neighbouring_voxels(chunk: &Chunk, position: glam::UVec3, voxel: Voxel) -> u8 {
         let mut mask = 0;
         for i in 0..6 {
             let face_direction: glam::IVec3 = QuadFace::from_i64(i as i64)
                 .expect("to convert primitive to quad face enum")
                 .into();
             let neighbour = position.saturating_add_signed(face_direction);
-            if let Some(voxel) = chunk.get_voxel(neighbour) {
-                if *voxel != Voxel::Air {
+            if let Some(v) = chunk.get_voxel(neighbour) {
+                if *v == voxel {
                     mask |= 1 << i;
                 }
             }
