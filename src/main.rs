@@ -10,7 +10,6 @@ use glium::{
     },
     DrawParameters, Surface,
 };
-use transform::Transform;
 
 mod camera;
 mod chunk;
@@ -65,13 +64,8 @@ fn main() {
     let chunk = world_generator.generate_chunk(glam::uvec3(0, 0, 0));
     let chunk_mesh = ChunkMesher::mesh(&chunk);
 
-    let chunk_transform = Transform {
-        position: glam::vec3(0.0, 0.0, 0.0),
-        rotation: glam::Quat::IDENTITY,
-        scale: glam::vec3(1.0, 1.0, 1.0),
-    };
-    let chunk_model = chunk_transform.model_matrix().to_cols_array_2d();
-    let chunk_normal = chunk_transform.normal_matrix().to_cols_array_2d();
+    let chunk_model = chunk.transform().model_matrix().to_cols_array_2d();
+    let chunk_normal = chunk.transform().normal_matrix().to_cols_array_2d();
 
     let vertex_buffer =
         glium::VertexBuffer::new(&display, &chunk_mesh.vertices).expect("to create vertex buffer");

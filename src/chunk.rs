@@ -3,6 +3,7 @@ use num_traits::FromPrimitive;
 use crate::{
     mesh::Mesh,
     quad::{QuadFace, QuadFaceOptions},
+    transform::Transform,
     utils::{coord_to_index, index_to_coord},
 };
 
@@ -15,14 +16,18 @@ pub enum Voxel {
 pub const CHUNK_SIZE: glam::UVec3 = glam::uvec3(16, 16, 16);
 
 pub struct Chunk {
-    _position: glam::UVec3,
+    transform: Transform,
     voxels: Vec<Voxel>,
 }
 
 impl Chunk {
     pub fn new(position: glam::UVec3) -> Self {
         Self {
-            _position: position,
+            transform: Transform {
+                position: glam::vec3(position.x as f32, position.y as f32, position.z as f32),
+                rotation: glam::Quat::IDENTITY,
+                scale: glam::Vec3::ONE,
+            },
             voxels: vec![
                 Voxel::Air;
                 CHUNK_SIZE.x as usize * CHUNK_SIZE.y as usize * CHUNK_SIZE.z as usize
@@ -51,6 +56,10 @@ impl Chunk {
             chunk: self,
             current_index: 0,
         }
+    }
+
+    pub fn transform(&self) -> Transform {
+        self.transform
     }
 }
 
