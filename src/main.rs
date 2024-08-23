@@ -61,14 +61,24 @@ fn main() {
         .max_world_height(CHUNK_SIZE.y)
         .build();
 
-    let chunk = world_generator.generate_chunk(glam::uvec3(0, 0, 0));
-    let chunk_mesh = ChunkMesher::mesh(&chunk);
-    let chunk_buffers = chunk_mesh
-        .as_opengl_buffers(&display)
-        .expect("to create opengl buffers");
+    let mut chunk_buffers = vec![];
+    let mut chunk_uniforms = vec![];
 
-    let chunk_model = chunk.transform().model_matrix().to_cols_array_2d();
-    let chunk_normal = chunk.transform().normal_matrix().to_cols_array_2d();
+    for x in 0..5 {
+        for z in 0..5 {
+            let chunk = world_generator.generate_chunk(glam::uvec3(x, 0, z));
+            let mesh = ChunkMesher::mesh(&chunk);
+            let buffers = mesh
+                .as_opengl_buffers(&display)
+                .expect("to create opengl buffers");
+
+            chunk_buffers.push(buffers);
+            chunk_uniforms.push((
+                chunk.transform().model_matrix().to_cols_array_2d(),
+                chunk.transform().normal_matrix().to_cols_array_2d(),
+            ));
+        }
+    }
 
     let mut last_frame_time = std::time::Instant::now();
 
@@ -102,15 +112,19 @@ fn main() {
 
                         let mut frame = display.draw();
                         frame.clear_color(0.0, 0.45, 0.74, 1.0);
-                        frame
+
+                        for ((vertices, indices), (model, normal)) in
+                            chunk_buffers.iter().zip(chunk_uniforms.iter())
+                        {
+                            frame
                             .draw(
-                                &chunk_buffers.0,
-                                &chunk_buffers.1,
+                                vertices,
+                                indices,
                                 &program,
                                 &uniform! {
                                     view_proj: view_proj,
-                                    model: chunk_model,
-                                    normal_matrix: chunk_normal,
+                                    model: *model,
+                                    normal_matrix: *normal,
                                     light_color: light_color,
                                     light_position: light_position
                                 },
@@ -121,6 +135,8 @@ fn main() {
                                 },
                             )
                             .expect("to draw vertices");
+                        }
+
                         frame.finish().expect("to finish drawing");
                     }
                     WindowEvent::Resized(window_size) => {
