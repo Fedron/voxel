@@ -10,12 +10,14 @@ use glium::{
     },
     DrawParameters, Surface,
 };
+use transform::Transform;
 
 mod camera;
 mod chunk;
 mod generator;
 mod mesh;
 mod quad;
+mod transform;
 mod utils;
 
 fn main() {
@@ -41,7 +43,7 @@ fn main() {
     )
     .expect("to compile shaders");
 
-    let mut camera = Camera::new(glam::vec3(0.0, 0.0, 3.0), -90.0, 0.0);
+    let mut camera = Camera::new(glam::vec3(0.0, 0.0, 0.0), 0.0, 0.0);
     let mut camera_controller = CameraController::new(10.0, 0.5);
 
     let mut projection = {
@@ -62,6 +64,14 @@ fn main() {
 
     let chunk = world_generator.generate_chunk(glam::uvec3(0, 0, 0));
     let chunk_mesh = ChunkMesher::mesh(&chunk);
+
+    let chunk_transform = Transform {
+        position: glam::vec3(0.0, 0.0, 0.0),
+        rotation: glam::Quat::IDENTITY,
+        scale: glam::vec3(1.0, 1.0, 1.0),
+    };
+    let chunk_model = chunk_transform.model_matrix().to_cols_array_2d();
+    let chunk_normal = chunk_transform.normal_matrix().to_cols_array_2d();
 
     let vertex_buffer =
         glium::VertexBuffer::new(&display, &chunk_mesh.vertices).expect("to create vertex buffer");
@@ -111,6 +121,8 @@ fn main() {
                                 &program,
                                 &uniform! {
                                     view_proj: view_proj,
+                                    model: chunk_model,
+                                    normal_matrix: chunk_normal,
                                     light_color: light_color,
                                     light_position: light_position
                                 },

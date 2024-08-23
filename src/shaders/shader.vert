@@ -9,13 +9,13 @@ out vec3 vertex_normal;
 out vec3 frag_pos;
 
 uniform mat4 view_proj;
+uniform mat4 model;
+uniform mat3 normal_matrix;
 
 void main() {
     vertex_color = color;
-    vertex_normal = normal;
+    vertex_normal = normal_matrix * normal;
 
-    // TODO: Use model matrix
-    // TODO: Calculate frag position in world space
-    frag_pos = position;
-    gl_Position = view_proj * vec4(position, 1.0);
+    frag_pos = vec3(model * vec4(position, 1.0));
+    gl_Position = view_proj * model * vec4(position, 1.0);
 }
