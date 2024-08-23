@@ -111,7 +111,7 @@ fn main() {
                         let light_position: [f32; 3] = [20.0, 20.0, 20.0];
 
                         let mut frame = display.draw();
-                        frame.clear_color(0.0, 0.45, 0.74, 1.0);
+                        frame.clear_color_and_depth((0.0, 0.45, 0.74, 1.0), 1.0);
 
                         for ((vertices, indices), (model, normal)) in
                             chunk_buffers.iter().zip(chunk_uniforms.iter())
@@ -129,6 +129,11 @@ fn main() {
                                     light_position: light_position
                                 },
                                 &DrawParameters {
+                                    depth: glium::Depth {
+                                        test: glium::draw_parameters::DepthTest::IfLess,
+                                        write: true,
+                                        ..Default::default()
+                                    },
                                     backface_culling:
                                         glium::draw_parameters::BackfaceCullingMode::CullClockwise,
                                     ..Default::default()
