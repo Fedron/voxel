@@ -63,18 +63,12 @@ fn main() {
 
     let chunk = world_generator.generate_chunk(glam::uvec3(0, 0, 0));
     let chunk_mesh = ChunkMesher::mesh(&chunk);
+    let chunk_buffers = chunk_mesh
+        .as_opengl_buffers(&display)
+        .expect("to create opengl buffers");
 
     let chunk_model = chunk.transform().model_matrix().to_cols_array_2d();
     let chunk_normal = chunk.transform().normal_matrix().to_cols_array_2d();
-
-    let vertex_buffer =
-        glium::VertexBuffer::new(&display, &chunk_mesh.vertices).expect("to create vertex buffer");
-    let indices = glium::index::IndexBuffer::new(
-        &display,
-        glium::index::PrimitiveType::TrianglesList,
-        &chunk_mesh.indices,
-    )
-    .expect("to create index buffer");
 
     let mut last_frame_time = std::time::Instant::now();
 
@@ -110,8 +104,8 @@ fn main() {
                         frame.clear_color(0.0, 0.45, 0.74, 1.0);
                         frame
                             .draw(
-                                &vertex_buffer,
-                                &indices,
+                                &chunk_buffers.0,
+                                &chunk_buffers.1,
                                 &program,
                                 &uniform! {
                                     view_proj: view_proj,
