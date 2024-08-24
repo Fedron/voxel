@@ -2,7 +2,7 @@
 extern crate glium;
 use camera::{Camera, CameraController, Projection};
 use chunk::{ChunkMesher, CHUNK_SIZE};
-use generator::WorldGenerator;
+use generator::{WorldGenerator, WorldGeneratorOptions};
 use glium::{
     winit::{
         event::{DeviceEvent, ElementState, Event, KeyEvent, WindowEvent},
@@ -55,29 +55,31 @@ fn main() {
         )
     };
 
-    let world_generator = WorldGenerator::builder()
-        .seed(1337)
-        .chunk_size(CHUNK_SIZE)
-        .max_world_height(CHUNK_SIZE.y)
-        .build();
+    let world_generator = WorldGenerator::new(
+        WorldGeneratorOptions::builder()
+            .seed(1337)
+            .chunk_size(CHUNK_SIZE)
+            .world_size(glam::uvec3(5, 5, 5))
+            .max_terrain_height(CHUNK_SIZE.y * 3)
+            .build(),
+    );
+
+    let world = world_generator.generate_world();
 
     let mut chunk_buffers = vec![];
     let mut chunk_uniforms = vec![];
 
-    for x in -5..5 {
-        for z in -5..5 {
-            let chunk = world_generator.generate_chunk(glam::ivec3(x, 0, z));
-            let mesh = ChunkMesher::mesh(&chunk);
-            let buffers = mesh
-                .as_opengl_buffers(&display)
-                .expect("to create opengl buffers");
+    for chunk in world.values() {
+        let mesh = ChunkMesher::mesh(chunk);
+        let buffers = mesh
+            .as_opengl_buffers(&display)
+            .expect("to create opengl buffers");
 
-            chunk_buffers.push(buffers);
-            chunk_uniforms.push((
-                chunk.transform().model_matrix().to_cols_array_2d(),
-                chunk.transform().normal_matrix().to_cols_array_2d(),
-            ));
-        }
+        chunk_buffers.push(buffers);
+        chunk_uniforms.push((
+            chunk.transform().model_matrix().to_cols_array_2d(),
+            chunk.transform().normal_matrix().to_cols_array_2d(),
+        ));
     }
 
     let mut last_frame_time = std::time::Instant::now();

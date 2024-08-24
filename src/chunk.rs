@@ -21,7 +21,7 @@ pub struct Chunk {
 }
 
 impl Chunk {
-    pub fn new(position: glam::IVec3) -> Self {
+    pub fn new(position: glam::UVec3) -> Self {
         Self {
             transform: Transform {
                 position: glam::vec3(position.x as f32, position.y as f32, position.z as f32),

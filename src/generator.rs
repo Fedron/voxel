@@ -1,51 +1,72 @@
-use bon::bon;
+use std::collections::HashMap;
+
 use glam::FloatExt;
 use noise::{core::perlin::perlin_2d, permutationtable::PermutationTable};
 
 use crate::chunk::{Chunk, Voxel};
 
-pub struct WorldGenerator {
+#[bon::builder]
+pub struct WorldGeneratorOptions {
+    seed: u32,
     chunk_size: glam::UVec3,
-    max_world_height: u32,
+    world_size: glam::UVec3,
+    max_terrain_height: u32,
+}
 
+pub struct WorldGenerator {
+    options: WorldGeneratorOptions,
     permutation_table: PermutationTable,
 }
 
-#[bon]
 impl WorldGenerator {
-    #[builder]
-    pub fn new(seed: u32, chunk_size: glam::UVec3, max_world_height: u32) -> Self {
-        let permutation_table = PermutationTable::new(seed);
+    pub fn new(options: WorldGeneratorOptions) -> Self {
+        let permutation_table = PermutationTable::new(options.seed);
 
         Self {
-            chunk_size,
-            max_world_height,
+            options,
             permutation_table,
         }
     }
 
-    pub fn generate_chunk(&self, world_position: glam::IVec3) -> Chunk {
-        let mut chunk = Chunk::new(glam::ivec3(
-            world_position.x * self.chunk_size.x as i32,
-            world_position.y * self.chunk_size.y as i32,
-            world_position.z * self.chunk_size.z as i32,
+    pub fn generate_world(&self) -> HashMap<glam::UVec3, Chunk> {
+        let mut world = HashMap::new();
+
+        for x in 0..self.options.world_size.x {
+            for y in 0..self.options.world_size.y {
+                for z in 0..self.options.world_size.z {
+                    world.insert(
+                        glam::uvec3(x, y, z),
+                        self.generate_chunk(glam::uvec3(x, y, z)),
+                    );
+                }
+            }
+        }
+
+        world
+    }
+
+    pub fn generate_chunk(&self, world_position: glam::UVec3) -> Chunk {
+        let mut chunk = Chunk::new(glam::uvec3(
+            world_position.x * self.options.chunk_size.x,
+            world_position.y * self.options.chunk_size.y,
+            world_position.z * self.options.chunk_size.z,
         ));
 
-        for x in 0..self.chunk_size.x {
-            for z in 0..self.chunk_size.z {
+        for x in 0..self.options.chunk_size.x {
+            for z in 0..self.options.chunk_size.z {
                 let height = perlin_2d(
                     (
-                        ((world_position.x * self.chunk_size.x as i32) + x as i32) as f64 / 128.0,
-                        ((world_position.z * self.chunk_size.z as i32) + z as i32) as f64 / 128.0,
+                        ((world_position.x * self.options.chunk_size.x) + x) as f64 / 128.0,
+                        ((world_position.z * self.options.chunk_size.z) + z) as f64 / 128.0,
                     )
                         .into(),
                     &self.permutation_table,
                 )
-                .remap(-1.0, 1.0, 0.0, self.max_world_height as f64)
-                .floor() as i32;
+                .remap(-1.0, 1.0, 1.0, self.options.max_terrain_height as f64)
+                .floor() as u32;
 
-                for y in 0..self.chunk_size.y as i32 {
-                    if (world_position.y * self.chunk_size.y as i32) + y < height {
+                for y in 0..self.options.chunk_size.y {
+                    if (world_position.y * self.options.chunk_size.y) + y < height {
                         chunk.set_voxel(glam::UVec3::new(x, y as u32, z), Voxel::Stone);
                     }
                 }
