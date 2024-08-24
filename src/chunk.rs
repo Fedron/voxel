@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use num_traits::FromPrimitive;
 
 use crate::{
@@ -16,15 +18,21 @@ pub enum Voxel {
 pub const CHUNK_SIZE: glam::UVec3 = glam::uvec3(16, 16, 16);
 
 pub struct Chunk {
+    grid_position: glam::UVec3,
+    size: glam::UVec3,
     transform: Transform,
     voxels: Vec<Voxel>,
 }
 
 impl Chunk {
-    pub fn new(position: glam::UVec3) -> Self {
+    pub fn new(grid_position: glam::UVec3, size: glam::UVec3) -> Self {
+        let transform_position = grid_position * size;
+
         Self {
+            grid_position,
+            size,
             transform: Transform {
-                position: glam::vec3(position.x as f32, position.y as f32, position.z as f32),
+                position: transform_position.as_vec3(),
                 rotation: glam::Quat::IDENTITY,
                 scale: glam::Vec3::ONE,
             },
@@ -86,7 +94,7 @@ impl<'a> Iterator for ChunkIterator<'a> {
 pub struct ChunkMesher {}
 
 impl ChunkMesher {
-    pub fn mesh(chunk: &Chunk) -> Mesh {
+    pub fn mesh(chunk: &Chunk, neighbours: HashMap<glam::UVec3, &Chunk>) -> Mesh {
         let mut vertices = vec![];
         let mut indices = vec![];
 
@@ -95,9 +103,11 @@ impl ChunkMesher {
                 Voxel::Stone => {
                     let neighbours = Self::get_neighbouring_voxels(
                         chunk,
-                        index_to_coord(index, CHUNK_SIZE),
+                        &neighbours,
+                        index_to_coord(index, CHUNK_SIZE).as_ivec3(),
                         Voxel::Air,
                     );
+
                     for i in 0..6 {
                         if (neighbours >> i) & 1 == 1 {
                             let position = index_to_coord(index, CHUNK_SIZE);
@@ -123,16 +133,82 @@ impl ChunkMesher {
         Mesh { vertices, indices }
     }
 
-    fn get_neighbouring_voxels(chunk: &Chunk, position: glam::UVec3, voxel: Voxel) -> u8 {
+    fn get_neighbouring_voxels(
+        chunk: &Chunk,
+        chunk_neighbours: &HashMap<glam::UVec3, &Chunk>,
+        voxel_position: glam::IVec3,
+        voxel: Voxel,
+    ) -> u8 {
         let mut mask = 0;
         for i in 0..6 {
             let face_direction: glam::IVec3 = QuadFace::from_i64(i as i64)
                 .expect("to convert primitive to quad face enum")
                 .into();
-            let neighbour = position.saturating_add_signed(face_direction);
-            if let Some(v) = chunk.get_voxel(neighbour) {
-                if *v == voxel {
-                    mask |= 1 << i;
+
+            // If neighbour is within the same chunk, check voxel in the chunk
+            let neighbour_position = voxel_position + face_direction;
+            if neighbour_position.x >= 0
+                && neighbour_position.x < chunk.size.x as i32
+                && neighbour_position.y >= 0
+                && neighbour_position.y < chunk.size.y as i32
+                && neighbour_position.z >= 0
+                && neighbour_position.z < chunk.size.z as i32
+            {
+                if let Some(neighbour) = chunk.get_voxel(neighbour_position.as_uvec3()) {
+                    if *neighbour == voxel {
+                        mask |= 1 << i;
+                    }
+                }
+            }
+            // If neighbour is out of bounds for this chunk, try checking the corresponding neighbouring chunk
+            else {
+                let neighbour_chunk_position = chunk.grid_position.as_ivec3() + face_direction;
+                let neighbour_chunk_position: Result<glam::UVec3, _> =
+                    neighbour_chunk_position.try_into();
+
+                match neighbour_chunk_position {
+                    Ok(neighbour) => {
+                        if let Some(neighbour_chunk) = chunk_neighbours.get(&neighbour) {
+                            let neighbour_position = match face_direction {
+                                glam::IVec3::X => {
+                                    glam::uvec3(0, voxel_position.y as u32, voxel_position.z as u32)
+                                }
+                                glam::IVec3::Y => {
+                                    glam::uvec3(voxel_position.x as u32, 0, voxel_position.z as u32)
+                                }
+                                glam::IVec3::Z => {
+                                    glam::uvec3(voxel_position.x as u32, voxel_position.y as u32, 0)
+                                }
+                                glam::IVec3::NEG_X => glam::uvec3(
+                                    CHUNK_SIZE.x - 1,
+                                    voxel_position.y as u32,
+                                    voxel_position.z as u32,
+                                ),
+                                glam::IVec3::NEG_Y => glam::uvec3(
+                                    voxel_position.x as u32,
+                                    CHUNK_SIZE.y - 1,
+                                    voxel_position.z as u32,
+                                ),
+                                glam::IVec3::NEG_Z => glam::uvec3(
+                                    voxel_position.x as u32,
+                                    voxel_position.y as u32,
+                                    CHUNK_SIZE.z - 1,
+                                ),
+                                _ => unreachable!(),
+                            };
+
+                            if let Some(neighbour) = neighbour_chunk.get_voxel(neighbour_position) {
+                                if *neighbour == voxel {
+                                    mask |= 1 << i;
+                                }
+                            }
+                        } else {
+                            mask |= 1 << i;
+                        }
+                    }
+                    Err(_) => {
+                        mask |= 1 << i;
+                    }
                 }
             }
         }

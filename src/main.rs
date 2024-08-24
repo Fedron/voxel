@@ -1,5 +1,7 @@
 #[macro_use]
 extern crate glium;
+use std::collections::HashMap;
+
 use camera::{Camera, CameraController, Projection};
 use chunk::{ChunkMesher, CHUNK_SIZE};
 use generator::{WorldGenerator, WorldGeneratorOptions};
@@ -10,6 +12,7 @@ use glium::{
     },
     DrawParameters, Surface,
 };
+use num_traits::FromPrimitive;
 
 mod camera;
 mod chunk;
@@ -59,7 +62,7 @@ fn main() {
         WorldGeneratorOptions::builder()
             .seed(1337)
             .chunk_size(CHUNK_SIZE)
-            .world_size(glam::uvec3(5, 5, 5))
+            .world_size(glam::UVec3::splat(5))
             .max_terrain_height(CHUNK_SIZE.y * 3)
             .build(),
     );
@@ -69,8 +72,20 @@ fn main() {
     let mut chunk_buffers = vec![];
     let mut chunk_uniforms = vec![];
 
-    for chunk in world.values() {
-        let mesh = ChunkMesher::mesh(chunk);
+    for (&position, chunk) in world.iter() {
+        let mut neighbours = HashMap::new();
+        for i in 0..6 {
+            let neighbour_position = position.saturating_add_signed(
+                quad::QuadFace::from_i64(i as i64)
+                    .expect("to convert primitive to quad face enum")
+                    .into(),
+            );
+            if let Some(neighbour) = world.get(&neighbour_position) {
+                neighbours.insert(neighbour_position, neighbour);
+            }
+        }
+
+        let mesh = ChunkMesher::mesh(chunk, neighbours);
         let buffers = mesh
             .as_opengl_buffers(&display)
             .expect("to create opengl buffers");
@@ -110,7 +125,7 @@ fn main() {
                             (projection.matrix() * camera.view_matrix()).to_cols_array_2d();
 
                         let light_color: [f32; 3] = [1.0, 1.0, 1.0];
-                        let light_position: [f32; 3] = [20.0, 20.0, 20.0];
+                        let light_position: [f32; 3] = [100.0, 100.0, 100.0];
 
                         let mut frame = display.draw();
                         frame.clear_color_and_depth((0.0, 0.45, 0.74, 1.0), 1.0);
