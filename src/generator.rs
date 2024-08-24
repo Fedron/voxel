@@ -68,12 +68,26 @@ impl WorldGenerator {
                     let voxel_world_height = world_position.y + y;
 
                     if voxel_world_height == terrain_height {
-                        chunk.set_voxel(glam::uvec3(x, y, z), Voxel::Grass);
+                        chunk.set_voxel(
+                            glam::uvec3(x, y, z),
+                            if voxel_world_height <= self.options.sea_level {
+                                Voxel::Sand
+                            } else {
+                                Voxel::Grass
+                            },
+                        );
                     } else if voxel_world_height
                         >= terrain_height - self.options.dirt_layer_thickness
                         && voxel_world_height < terrain_height
                     {
-                        chunk.set_voxel(glam::UVec3::new(x, y, z), Voxel::Dirt);
+                        chunk.set_voxel(
+                            glam::UVec3::new(x, y, z),
+                            if voxel_world_height <= self.options.sea_level {
+                                Voxel::Sand
+                            } else {
+                                Voxel::Dirt
+                            },
+                        );
                     } else if voxel_world_height < terrain_height {
                         chunk.set_voxel(glam::UVec3::new(x, y, z), Voxel::Stone);
                     } else if voxel_world_height < self.options.sea_level {
