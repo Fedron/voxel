@@ -64,9 +64,9 @@ fn main() {
     let mut chunk_buffers = vec![];
     let mut chunk_uniforms = vec![];
 
-    for x in 0..5 {
-        for z in 0..5 {
-            let chunk = world_generator.generate_chunk(glam::uvec3(x, 0, z));
+    for x in -5..5 {
+        for z in -5..5 {
+            let chunk = world_generator.generate_chunk(glam::ivec3(x, 0, z));
             let mesh = ChunkMesher::mesh(&chunk);
             let buffers = mesh
                 .as_opengl_buffers(&display)

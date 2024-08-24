@@ -24,29 +24,29 @@ impl WorldGenerator {
         }
     }
 
-    pub fn generate_chunk(&self, world_position: glam::UVec3) -> Chunk {
-        let mut chunk = Chunk::new(glam::uvec3(
-            world_position.x * self.chunk_size.x,
-            world_position.y * self.chunk_size.y,
-            world_position.z * self.chunk_size.z,
+    pub fn generate_chunk(&self, world_position: glam::IVec3) -> Chunk {
+        let mut chunk = Chunk::new(glam::ivec3(
+            world_position.x * self.chunk_size.x as i32,
+            world_position.y * self.chunk_size.y as i32,
+            world_position.z * self.chunk_size.z as i32,
         ));
 
         for x in 0..self.chunk_size.x {
             for z in 0..self.chunk_size.z {
                 let height = perlin_2d(
                     (
-                        ((world_position.x * self.chunk_size.x) + x) as f64 / 128.0,
-                        ((world_position.z * self.chunk_size.z) + z) as f64 / 128.0,
+                        ((world_position.x * self.chunk_size.x as i32) + x as i32) as f64 / 128.0,
+                        ((world_position.z * self.chunk_size.z as i32) + z as i32) as f64 / 128.0,
                     )
                         .into(),
                     &self.permutation_table,
                 )
                 .remap(-1.0, 1.0, 0.0, self.max_world_height as f64)
-                .floor() as u32;
+                .floor() as i32;
 
-                for y in 0..self.chunk_size.y {
-                    if (world_position.y * self.chunk_size.y) + y < height as u32 {
-                        chunk.set_voxel(glam::UVec3::new(x, y, z), Voxel::Stone);
+                for y in 0..self.chunk_size.y as i32 {
+                    if (world_position.y * self.chunk_size.y as i32) + y < height {
+                        chunk.set_voxel(glam::UVec3::new(x, y as u32, z), Voxel::Stone);
                     }
                 }
             }
