@@ -19,5 +19,5 @@ void main() {
     vec3 diffuse = diff * light_color;
 
     vec3 result = (ambient + diffuse) * vertex_color;
-    color = vec4(result, 1.0);
+    color = vec4(pow(result, vec3(1.0 / 2.2)), 1.0);
 }
