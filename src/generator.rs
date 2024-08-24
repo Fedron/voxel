@@ -77,7 +77,7 @@ impl WorldGenerator {
                             },
                         );
                     } else if voxel_world_height
-                        >= terrain_height - self.options.dirt_layer_thickness
+                        >= terrain_height.saturating_sub(self.options.dirt_layer_thickness)
                         && voxel_world_height < terrain_height
                     {
                         chunk.set_voxel(

@@ -62,7 +62,7 @@ fn main() {
         WorldGeneratorOptions::builder()
             .seed(1337)
             .chunk_size(CHUNK_SIZE)
-            .world_size(glam::UVec3::splat(5))
+            .world_size(glam::UVec3::splat(10))
             .max_terrain_height(CHUNK_SIZE.y * 3)
             .dirt_layer_thickness(5)
             .sea_level(CHUNK_SIZE.y)
