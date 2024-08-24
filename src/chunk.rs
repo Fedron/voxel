@@ -9,10 +9,25 @@ use crate::{
     utils::{coord_to_index, index_to_coord},
 };
 
+pub type VoxelColor = [f32; 3];
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Voxel {
     Air,
     Stone,
+    Grass,
+    Dirt,
+}
+
+impl Into<VoxelColor> for Voxel {
+    fn into(self) -> VoxelColor {
+        match self {
+            Voxel::Air => [0.0, 0.0, 0.0],
+            Voxel::Stone => [0.69, 0.72, 0.72],
+            Voxel::Grass => [0.23, 0.82, 0.24],
+            Voxel::Dirt => [0.63, 0.45, 0.29],
+        }
+    }
 }
 
 pub const CHUNK_SIZE: glam::UVec3 = glam::uvec3(16, 16, 16);
@@ -100,7 +115,7 @@ impl ChunkMesher {
 
         for (voxel, index) in chunk.iter() {
             match voxel {
-                Voxel::Stone => {
+                Voxel::Stone | Voxel::Grass | Voxel::Dirt => {
                     let neighbours = Self::get_neighbouring_voxels(
                         chunk,
                         &neighbours,
@@ -118,7 +133,7 @@ impl ChunkMesher {
                                 .as_mesh(QuadFaceOptions {
                                     base_position: base_position.into(),
                                     half_size: 0.5,
-                                    color: [0.5, 0.5, 0.5],
+                                    color: (*voxel).into(),
                                     base_index: vertices.len() as u32,
                                 });
                             vertices.extend(mesh.vertices);

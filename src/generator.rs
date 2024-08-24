@@ -11,6 +11,7 @@ pub struct WorldGeneratorOptions {
     chunk_size: glam::UVec3,
     world_size: glam::UVec3,
     max_terrain_height: u32,
+    dirt_layer_thickness: u32,
 }
 
 pub struct WorldGenerator {
@@ -47,13 +48,14 @@ impl WorldGenerator {
 
     pub fn generate_chunk(&self, grid_position: glam::UVec3) -> Chunk {
         let mut chunk = Chunk::new(grid_position, self.options.chunk_size);
+        let world_position = grid_position * self.options.chunk_size;
 
         for x in 0..self.options.chunk_size.x {
             for z in 0..self.options.chunk_size.z {
-                let height = perlin_2d(
+                let terrain_height = perlin_2d(
                     (
-                        ((grid_position.x * self.options.chunk_size.x) + x) as f64 / 128.0,
-                        ((grid_position.z * self.options.chunk_size.z) + z) as f64 / 128.0,
+                        (world_position.x + x) as f64 / 128.0,
+                        (world_position.z + z) as f64 / 128.0,
                     )
                         .into(),
                     &self.permutation_table,
@@ -62,8 +64,17 @@ impl WorldGenerator {
                 .floor() as u32;
 
                 for y in 0..self.options.chunk_size.y {
-                    if (grid_position.y * self.options.chunk_size.y) + y < height {
-                        chunk.set_voxel(glam::UVec3::new(x, y as u32, z), Voxel::Stone);
+                    let voxel_world_height = world_position.y + y;
+
+                    if voxel_world_height == terrain_height {
+                        chunk.set_voxel(glam::uvec3(x, y, z), Voxel::Grass);
+                    } else if voxel_world_height
+                        >= terrain_height - self.options.dirt_layer_thickness
+                        && voxel_world_height < terrain_height
+                    {
+                        chunk.set_voxel(glam::UVec3::new(x, y, z), Voxel::Dirt);
+                    } else if voxel_world_height < terrain_height {
+                        chunk.set_voxel(glam::UVec3::new(x, y, z), Voxel::Stone);
                     }
                 }
             }

@@ -46,7 +46,7 @@ fn main() {
     .expect("to compile shaders");
 
     let mut camera = Camera::new(glam::vec3(0.0, 0.0, 0.0), 0.0, 0.0);
-    let mut camera_controller = CameraController::new(10.0, 0.5);
+    let mut camera_controller = CameraController::new(20.0, 0.5);
 
     let mut projection = {
         let window_size = window.inner_size();
@@ -64,6 +64,7 @@ fn main() {
             .chunk_size(CHUNK_SIZE)
             .world_size(glam::UVec3::splat(5))
             .max_terrain_height(CHUNK_SIZE.y * 3)
+            .dirt_layer_thickness(5)
             .build(),
     );
 
