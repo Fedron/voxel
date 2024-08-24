@@ -17,6 +17,7 @@ pub enum Voxel {
     Stone,
     Grass,
     Dirt,
+    Water,
 }
 
 impl Into<VoxelColor> for Voxel {
@@ -26,6 +27,7 @@ impl Into<VoxelColor> for Voxel {
             Voxel::Stone => [0.69, 0.72, 0.72],
             Voxel::Grass => [0.23, 0.82, 0.24],
             Voxel::Dirt => [0.63, 0.45, 0.29],
+            Voxel::Water => [0.0, 0.62, 1.0],
         }
     }
 }
@@ -115,7 +117,7 @@ impl ChunkMesher {
 
         for (voxel, index) in chunk.iter() {
             match voxel {
-                Voxel::Stone | Voxel::Grass | Voxel::Dirt => {
+                Voxel::Stone | Voxel::Grass | Voxel::Dirt | Voxel::Water => {
                     let neighbours = Self::get_neighbouring_voxels(
                         chunk,
                         &neighbours,

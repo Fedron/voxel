@@ -12,6 +12,7 @@ pub struct WorldGeneratorOptions {
     world_size: glam::UVec3,
     max_terrain_height: u32,
     dirt_layer_thickness: u32,
+    sea_level: u32,
 }
 
 pub struct WorldGenerator {
@@ -75,6 +76,8 @@ impl WorldGenerator {
                         chunk.set_voxel(glam::UVec3::new(x, y, z), Voxel::Dirt);
                     } else if voxel_world_height < terrain_height {
                         chunk.set_voxel(glam::UVec3::new(x, y, z), Voxel::Stone);
+                    } else if voxel_world_height < self.options.sea_level {
+                        chunk.set_voxel(glam::UVec3::new(x, y, z), Voxel::Water);
                     }
                 }
             }

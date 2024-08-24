@@ -65,6 +65,7 @@ fn main() {
             .world_size(glam::UVec3::splat(5))
             .max_terrain_height(CHUNK_SIZE.y * 3)
             .dirt_layer_thickness(5)
+            .sea_level(CHUNK_SIZE.y)
             .build(),
     );
 
