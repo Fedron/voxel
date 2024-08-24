@@ -71,8 +71,9 @@ fn main() {
 
     let world = world_generator.generate_world();
 
-    let mut chunk_buffers = vec![];
-    let mut chunk_uniforms = vec![];
+    let mut chunk_solid_buffers = HashMap::new();
+    let mut chunk_transparent_buffers = HashMap::new();
+    let mut chunk_uniforms = HashMap::new();
 
     for (&position, chunk) in world.iter() {
         let mut neighbours = HashMap::new();
@@ -88,15 +89,30 @@ fn main() {
         }
 
         let mesh = ChunkMesher::mesh(chunk, neighbours);
-        let buffers = mesh
-            .as_opengl_buffers(&display)
-            .expect("to create opengl buffers");
 
-        chunk_buffers.push(buffers);
-        chunk_uniforms.push((
-            chunk.transform().model_matrix().to_cols_array_2d(),
-            chunk.transform().normal_matrix().to_cols_array_2d(),
-        ));
+        chunk_uniforms.insert(
+            position,
+            (
+                chunk.transform().model_matrix().to_cols_array_2d(),
+                chunk.transform().normal_matrix().to_cols_array_2d(),
+            ),
+        );
+
+        chunk_solid_buffers.insert(
+            position,
+            mesh.solid
+                .as_opengl_buffers(&display)
+                .expect("to create opengl buffers"),
+        );
+
+        if let Some(transparent) = mesh.transparent {
+            chunk_transparent_buffers.insert(
+                position,
+                transparent
+                    .as_opengl_buffers(&display)
+                    .expect("to create opengl buffers"),
+            );
+        }
     }
 
     let mut last_frame_time = std::time::Instant::now();
@@ -132,9 +148,8 @@ fn main() {
                         let mut frame = display.draw();
                         frame.clear_color_and_depth((0.0, 0.45, 0.74, 1.0), 1.0);
 
-                        for ((vertices, indices), (model, normal)) in
-                            chunk_buffers.iter().zip(chunk_uniforms.iter())
-                        {
+                        for (position, (vertices, indices)) in chunk_solid_buffers.iter() {
+                            let (model, normal) = chunk_uniforms.get(position).unwrap();
                             frame
                             .draw(
                                 vertices,
@@ -155,6 +170,36 @@ fn main() {
                                     },
                                     backface_culling:
                                         glium::draw_parameters::BackfaceCullingMode::CullClockwise,
+                                    blend: glium::Blend::alpha_blending(),
+                                    ..Default::default()
+                                },
+                            )
+                            .expect("to draw vertices");
+                        }
+
+                        for (position, (vertices, indices)) in chunk_transparent_buffers.iter() {
+                            let (model, normal) = chunk_uniforms.get(position).unwrap();
+                            frame
+                            .draw(
+                                vertices,
+                                indices,
+                                &program,
+                                &uniform! {
+                                    view_proj: view_proj,
+                                    model: *model,
+                                    normal_matrix: *normal,
+                                    light_color: light_color,
+                                    light_position: light_position
+                                },
+                                &DrawParameters {
+                                    depth: glium::Depth {
+                                        test: glium::draw_parameters::DepthTest::IfLess,
+                                        write: true,
+                                        ..Default::default()
+                                    },
+                                    backface_culling:
+                                        glium::draw_parameters::BackfaceCullingMode::CullClockwise,
+                                    blend: glium::Blend::alpha_blending(),
                                     ..Default::default()
                                 },
                             )

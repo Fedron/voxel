@@ -9,7 +9,7 @@ use crate::{
     utils::{coord_to_index, index_to_coord},
 };
 
-pub type VoxelColor = [f32; 3];
+pub type VoxelColor = [f32; 4];
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Voxel {
@@ -23,12 +23,26 @@ pub enum Voxel {
 impl Into<VoxelColor> for Voxel {
     fn into(self) -> VoxelColor {
         match self {
-            Voxel::Air => [0.0, 0.0, 0.0],
-            Voxel::Stone => [0.69, 0.72, 0.72],
-            Voxel::Grass => [0.23, 0.82, 0.24],
-            Voxel::Dirt => [0.63, 0.45, 0.29],
-            Voxel::Water => [0.0, 0.62, 1.0],
+            Voxel::Air => [0.0, 0.0, 0.0, 0.0],
+            Voxel::Stone => [0.69, 0.72, 0.72, 1.0],
+            Voxel::Grass => [0.23, 0.82, 0.24, 1.0],
+            Voxel::Dirt => [0.63, 0.45, 0.29, 1.0],
+            Voxel::Water => [0.0, 0.62, 1.0, 0.8],
         }
+    }
+}
+
+impl Voxel {
+    pub fn is_air(self) -> bool {
+        self == Voxel::Air
+    }
+
+    pub fn is_liquid(self) -> bool {
+        self == Voxel::Water
+    }
+
+    pub fn is_solid(self) -> bool {
+        !self.is_air() && !self.is_liquid()
     }
 }
 
@@ -108,21 +122,28 @@ impl<'a> Iterator for ChunkIterator<'a> {
     }
 }
 
+pub struct ChunkMesh {
+    pub solid: Mesh,
+    pub transparent: Option<Mesh>,
+}
+
 pub struct ChunkMesher {}
 
 impl ChunkMesher {
-    pub fn mesh(chunk: &Chunk, neighbours: HashMap<glam::UVec3, &Chunk>) -> Mesh {
-        let mut vertices = vec![];
-        let mut indices = vec![];
+    pub fn mesh(chunk: &Chunk, neighbours: HashMap<glam::UVec3, &Chunk>) -> ChunkMesh {
+        let mut solid_vertices = vec![];
+        let mut solid_indices = vec![];
+        let mut transparent_vertices = vec![];
+        let mut transparent_indices = vec![];
 
         for (voxel, index) in chunk.iter() {
             match voxel {
-                Voxel::Stone | Voxel::Grass | Voxel::Dirt | Voxel::Water => {
+                Voxel::Stone | Voxel::Grass | Voxel::Dirt => {
                     let neighbours = Self::get_neighbouring_voxels(
                         chunk,
                         &neighbours,
                         index_to_coord(index, CHUNK_SIZE).as_ivec3(),
-                        Voxel::Air,
+                        |v| !v.is_solid(),
                     );
 
                     for i in 0..6 {
@@ -136,10 +157,36 @@ impl ChunkMesher {
                                     base_position: base_position.into(),
                                     half_size: 0.5,
                                     color: (*voxel).into(),
-                                    base_index: vertices.len() as u32,
+                                    base_index: solid_vertices.len() as u32,
                                 });
-                            vertices.extend(mesh.vertices);
-                            indices.extend(mesh.indices);
+                            solid_vertices.extend(mesh.vertices);
+                            solid_indices.extend(mesh.indices);
+                        }
+                    }
+                }
+                Voxel::Water => {
+                    let neighbours = Self::get_neighbouring_voxels(
+                        chunk,
+                        &neighbours,
+                        index_to_coord(index, CHUNK_SIZE).as_ivec3(),
+                        Voxel::is_air,
+                    );
+
+                    for i in 0..6 {
+                        if (neighbours >> i) & 1 == 1 {
+                            let position = index_to_coord(index, CHUNK_SIZE);
+                            let base_position =
+                                glam::vec3(position.x as f32, position.y as f32, position.z as f32);
+                            let mesh = QuadFace::from_i64(i as i64)
+                                .expect("to convert primitive to quad face enum")
+                                .as_mesh(QuadFaceOptions {
+                                    base_position: base_position.into(),
+                                    half_size: 0.5,
+                                    color: (*voxel).into(),
+                                    base_index: transparent_vertices.len() as u32,
+                                });
+                            transparent_vertices.extend(mesh.vertices);
+                            transparent_indices.extend(mesh.indices);
                         }
                     }
                 }
@@ -147,15 +194,33 @@ impl ChunkMesher {
             }
         }
 
-        Mesh { vertices, indices }
+        let transparent_mesh = if transparent_vertices.is_empty() {
+            None
+        } else {
+            Some(Mesh {
+                vertices: transparent_vertices,
+                indices: transparent_indices,
+            })
+        };
+
+        ChunkMesh {
+            solid: Mesh {
+                vertices: solid_vertices,
+                indices: solid_indices,
+            },
+            transparent: transparent_mesh,
+        }
     }
 
-    fn get_neighbouring_voxels(
+    fn get_neighbouring_voxels<C>(
         chunk: &Chunk,
         chunk_neighbours: &HashMap<glam::UVec3, &Chunk>,
         voxel_position: glam::IVec3,
-        voxel: Voxel,
-    ) -> u8 {
+        condition: C,
+    ) -> u8
+    where
+        C: Fn(Voxel) -> bool,
+    {
         let mut mask = 0;
         for i in 0..6 {
             let face_direction: glam::IVec3 = QuadFace::from_i64(i as i64)
@@ -172,7 +237,7 @@ impl ChunkMesher {
                 && neighbour_position.z < chunk.size.z as i32
             {
                 if let Some(neighbour) = chunk.get_voxel(neighbour_position.as_uvec3()) {
-                    if *neighbour == voxel {
+                    if condition(*neighbour) {
                         mask |= 1 << i;
                     }
                 }
@@ -215,7 +280,7 @@ impl ChunkMesher {
                             };
 
                             if let Some(neighbour) = neighbour_chunk.get_voxel(neighbour_position) {
-                                if *neighbour == voxel {
+                                if condition(*neighbour) {
                                     mask |= 1 << i;
                                 }
                             }

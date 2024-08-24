@@ -4,7 +4,7 @@ pub struct QuadFaceOptions {
     pub half_size: f32,
     pub base_position: [f32; 3],
     pub base_index: u32,
-    pub color: [f32; 3],
+    pub color: [f32; 4],
 }
 
 impl Default for QuadFaceOptions {
@@ -13,7 +13,7 @@ impl Default for QuadFaceOptions {
             half_size: 0.5,
             base_position: [0.0; 3],
             base_index: 0,
-            color: [0.0, 1.0, 1.0],
+            color: [0.0, 1.0, 1.0, 1.0],
         }
     }
 }

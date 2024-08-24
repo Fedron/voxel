@@ -1,6 +1,6 @@
 #version 140
 
-in vec3 vertex_color;
+in vec4 vertex_color;
 in vec3 vertex_normal;
 in vec3 frag_pos;
 
@@ -18,6 +18,6 @@ void main() {
     float diff = max(dot(norm, light_dir), 0.0);
     vec3 diffuse = diff * light_color;
 
-    vec3 result = (ambient + diffuse) * vertex_color;
-    color = vec4(pow(result, vec3(1.0 / 2.2)), 1.0);
+    vec3 result = (ambient + diffuse) * vertex_color.xyz;
+    color = vec4(pow(result, vec3(1.0 / 2.2)), vertex_color.a);
 }
