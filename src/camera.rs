@@ -1,4 +1,4 @@
-use glium::winit::{event::ElementState, keyboard::KeyCode};
+use winit::{event::ElementState, keyboard::KeyCode};
 
 pub struct Camera {
     pub position: glam::Vec3,
