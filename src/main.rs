@@ -1,7 +1,8 @@
 #[macro_use]
 extern crate glium;
-use std::collections::HashMap;
+use std::{collections::HashMap, rc::Rc};
 
+use app::{App, AppBehaviour, Window};
 use camera::{Camera, CameraController, Projection};
 use chunk::{ChunkMesher, CHUNK_SIZE};
 use egui_glium::egui_winit::egui::ViewportId;
@@ -10,10 +11,10 @@ use glium::{DrawParameters, Surface};
 use num_traits::FromPrimitive;
 use winit::{
     event::{DeviceEvent, ElementState, Event, KeyEvent, WindowEvent},
-    event_loop::EventLoop,
     keyboard::{KeyCode, PhysicalKey},
 };
 
+mod app;
 mod camera;
 mod chunk;
 mod generator;
@@ -22,244 +23,284 @@ mod quad;
 mod transform;
 mod utils;
 
-fn main() {
-    let event_loop = EventLoop::new().expect("to create event loop");
-    let (window, display) = glium::backend::glutin::SimpleWindowBuilder::new()
-        .with_title("Voxels")
-        .with_inner_size(1280, 720)
-        .build(&event_loop);
+type ModelMatrix = [[f32; 4]; 4];
+type NormalMatrix = [[f32; 3]; 3];
 
-    let mut gui = egui_glium::EguiGlium::new(ViewportId::ROOT, &display, &window, &event_loop);
+struct VoxelApp {
+    window: Rc<Window>,
+    is_cursor_hidden: bool,
 
-    window
-        .set_cursor_grab(winit::window::CursorGrabMode::Locked)
-        .or_else(|_| window.set_cursor_grab(winit::window::CursorGrabMode::Confined))
-        .expect("to lock cursor to window");
-    window.set_cursor_visible(false);
+    camera: Camera,
+    camera_controller: CameraController,
+    projection: Projection,
 
-    let program = glium::Program::from_source(
-        &display,
-        include_str!("shaders/shader.vert"),
-        include_str!("shaders/shader.frag"),
-        None,
-    )
-    .expect("to compile shaders");
+    program: glium::Program,
+    chunk_solid_buffers:
+        HashMap<glam::UVec3, (glium::VertexBuffer<mesh::Vertex>, glium::IndexBuffer<u32>)>,
+    chunk_transparent_buffers:
+        HashMap<glam::UVec3, (glium::VertexBuffer<mesh::Vertex>, glium::IndexBuffer<u32>)>,
+    chunk_uniforms: HashMap<glam::UVec3, (ModelMatrix, NormalMatrix)>,
 
-    let mut camera = Camera::new(glam::vec3(0.0, 0.0, 0.0), 0.0, 0.0);
-    let mut camera_controller = CameraController::new(20.0, 0.5);
+    egui: egui_glium::EguiGlium,
+}
 
-    let mut projection = {
-        let window_size = window.inner_size();
-        Projection::new(
-            window_size.width as f32 / window_size.height as f32,
-            45.0,
-            0.1,
-            1000.0,
-        )
-    };
+impl AppBehaviour for VoxelApp {
+    fn process_events(&mut self, event: Event<()>) -> bool {
+        match event {
+            Event::WindowEvent { event, .. } => {
+                let _ = self.egui.on_event(&self.window.winit, &event);
+                match event {
+                    WindowEvent::KeyboardInput {
+                        event:
+                            KeyEvent {
+                                state: ElementState::Pressed,
+                                physical_key: PhysicalKey::Code(KeyCode::Escape),
+                                ..
+                            },
+                        ..
+                    } => false,
+                    WindowEvent::Resized(window_size) => {
+                        self.projection
+                            .resize(window_size.width as f32, window_size.height as f32);
+                        true
+                    }
+                    WindowEvent::KeyboardInput {
+                        event:
+                            KeyEvent {
+                                physical_key: PhysicalKey::Code(key),
+                                state,
+                                ..
+                            },
+                        ..
+                    } => {
+                        if key == KeyCode::AltLeft && state == ElementState::Pressed {
+                            self.is_cursor_hidden = false;
+                        } else if key == KeyCode::AltLeft && state == ElementState::Released {
+                            self.is_cursor_hidden = true;
+                        }
 
-    let world_generator = WorldGenerator::new(
-        WorldGeneratorOptions::builder()
-            .seed(1337)
-            .chunk_size(CHUNK_SIZE)
-            .world_size(glam::UVec3::splat(10))
-            .max_terrain_height(CHUNK_SIZE.y * 3)
-            .dirt_layer_thickness(5)
-            .sea_level(CHUNK_SIZE.y)
-            .build(),
-    );
-
-    let world = world_generator.generate_world();
-
-    let mut chunk_solid_buffers = HashMap::new();
-    let mut chunk_transparent_buffers = HashMap::new();
-    let mut chunk_uniforms = HashMap::new();
-
-    for (&position, chunk) in world.iter() {
-        let mut neighbours = HashMap::new();
-        for i in 0..6 {
-            let neighbour_position = position.saturating_add_signed(
-                quad::QuadFace::from_i64(i as i64)
-                    .expect("to convert primitive to quad face enum")
-                    .into(),
-            );
-            if let Some(neighbour) = world.get(&neighbour_position) {
-                neighbours.insert(neighbour_position, neighbour);
+                        self.camera_controller.process_keyboard(key, state);
+                        true
+                    }
+                    _ => true,
+                }
             }
-        }
+            Event::DeviceEvent {
+                event: DeviceEvent::MouseMotion { delta },
+                ..
+            } => {
+                if self.is_cursor_hidden {
+                    self.camera_controller
+                        .process_mouse(delta.0 as f32, delta.1 as f32);
+                }
 
-        let mesh = ChunkMesher::mesh(chunk, neighbours);
-
-        chunk_uniforms.insert(
-            position,
-            (
-                chunk.transform().model_matrix().to_cols_array_2d(),
-                chunk.transform().normal_matrix().to_cols_array_2d(),
-            ),
-        );
-
-        chunk_solid_buffers.insert(
-            position,
-            mesh.solid
-                .as_opengl_buffers(&display)
-                .expect("to create opengl buffers"),
-        );
-
-        if let Some(transparent) = mesh.transparent {
-            chunk_transparent_buffers.insert(
-                position,
-                transparent
-                    .as_opengl_buffers(&display)
-                    .expect("to create opengl buffers"),
-            );
+                true
+            }
+            _ => true,
         }
     }
 
-    let mut last_frame_time = std::time::Instant::now();
-    let mut is_holding_alt = false;
+    fn update(&mut self, delta_time: std::time::Duration) {
+        self.camera_controller
+            .update_camera(&mut self.camera, delta_time.as_secs_f32());
+    }
 
-    #[allow(deprecated)]
-    event_loop
-        .run(move |event, window_target| {
-            match event {
-                Event::WindowEvent { event, .. } => {
-                    match event {
-                        WindowEvent::CloseRequested
-                        | WindowEvent::KeyboardInput {
-                            event:
-                                KeyEvent {
-                                    state: ElementState::Pressed,
-                                    physical_key: PhysicalKey::Code(KeyCode::Escape),
-                                    ..
-                                },
-                            ..
-                        } => window_target.exit(),
-                        WindowEvent::RedrawRequested => {
-                            let current_time = std::time::Instant::now();
-                            let delta_time = current_time.duration_since(last_frame_time);
-                            last_frame_time = current_time;
+    fn render(&mut self, frame: &mut glium::Frame) {
+        self.window.winit.set_cursor_visible(!self.is_cursor_hidden);
 
-                            camera_controller.update_camera(&mut camera, delta_time.as_secs_f32());
+        let view_proj = (self.projection.matrix() * self.camera.view_matrix()).to_cols_array_2d();
 
-                            let view_proj =
-                                (projection.matrix() * camera.view_matrix()).to_cols_array_2d();
+        let light_color: [f32; 3] = [1.0, 1.0, 1.0];
+        let light_position: [f32; 3] = [100.0, 100.0, 100.0];
 
-                            let light_color: [f32; 3] = [1.0, 1.0, 1.0];
-                            let light_position: [f32; 3] = [100.0, 100.0, 100.0];
+        for (position, (vertices, indices)) in self.chunk_solid_buffers.iter() {
+            let (model, normal) = self.chunk_uniforms.get(position).unwrap();
+            frame
+                .draw(
+                    vertices,
+                    indices,
+                    &self.program,
+                    &uniform! {
+                        view_proj: view_proj,
+                        model: *model,
+                        normal_matrix: *normal,
+                        light_color: light_color,
+                        light_position: light_position
+                    },
+                    &DrawParameters {
+                        depth: glium::Depth {
+                            test: glium::draw_parameters::DepthTest::IfLess,
+                            write: true,
+                            ..Default::default()
+                        },
+                        backface_culling:
+                            glium::draw_parameters::BackfaceCullingMode::CullClockwise,
+                        blend: glium::Blend::alpha_blending(),
+                        ..Default::default()
+                    },
+                )
+                .expect("to draw vertices");
+        }
 
-                            let mut frame = display.draw();
-                            frame.clear_color_and_depth((0.0, 0.45, 0.74, 1.0), 1.0);
+        for (position, (vertices, indices)) in self.chunk_transparent_buffers.iter() {
+            let (model, normal) = self.chunk_uniforms.get(position).unwrap();
+            frame
+                .draw(
+                    vertices,
+                    indices,
+                    &self.program,
+                    &uniform! {
+                        view_proj: view_proj,
+                        model: *model,
+                        normal_matrix: *normal,
+                        light_color: light_color,
+                        light_position: light_position
+                    },
+                    &DrawParameters {
+                        depth: glium::Depth {
+                            test: glium::draw_parameters::DepthTest::IfLess,
+                            write: true,
+                            ..Default::default()
+                        },
+                        backface_culling:
+                            glium::draw_parameters::BackfaceCullingMode::CullClockwise,
+                        blend: glium::Blend::alpha_blending(),
+                        ..Default::default()
+                    },
+                )
+                .expect("to draw vertices");
+        }
 
-                            for (position, (vertices, indices)) in chunk_solid_buffers.iter() {
-                                let (model, normal) = chunk_uniforms.get(position).unwrap();
-                                frame
-                            .draw(
-                                vertices,
-                                indices,
-                                &program,
-                                &uniform! {
-                                    view_proj: view_proj,
-                                    model: *model,
-                                    normal_matrix: *normal,
-                                    light_color: light_color,
-                                    light_position: light_position
-                                },
-                                &DrawParameters {
-                                    depth: glium::Depth {
-                                        test: glium::draw_parameters::DepthTest::IfLess,
-                                        write: true,
-                                        ..Default::default()
-                                    },
-                                    backface_culling:
-                                        glium::draw_parameters::BackfaceCullingMode::CullClockwise,
-                                    blend: glium::Blend::alpha_blending(),
-                                    ..Default::default()
-                                },
-                            )
-                            .expect("to draw vertices");
-                            }
+        self.egui.run(&self.window.winit, |ctx| {
+            egui::Window::new("Hello World").show(ctx, |ui| {
+                ui.label("Hello World!");
+                ui.label("This is a simple egui window.");
+            });
+        });
 
-                            for (position, (vertices, indices)) in chunk_transparent_buffers.iter()
-                            {
-                                let (model, normal) = chunk_uniforms.get(position).unwrap();
-                                frame
-                            .draw(
-                                vertices,
-                                indices,
-                                &program,
-                                &uniform! {
-                                    view_proj: view_proj,
-                                    model: *model,
-                                    normal_matrix: *normal,
-                                    light_color: light_color,
-                                    light_position: light_position
-                                },
-                                &DrawParameters {
-                                    depth: glium::Depth {
-                                        test: glium::draw_parameters::DepthTest::IfLess,
-                                        write: true,
-                                        ..Default::default()
-                                    },
-                                    backface_culling:
-                                        glium::draw_parameters::BackfaceCullingMode::CullClockwise,
-                                    blend: glium::Blend::alpha_blending(),
-                                    ..Default::default()
-                                },
-                            )
-                            .expect("to draw vertices");
-                            }
+        self.egui.paint(&self.window.display, frame);
+    }
+}
 
-                            gui.run(&window, |ctx| {
-                                egui::Window::new("Hello World").show(ctx, |ui| {
-                                    ui.label("Hello World!");
-                                    ui.label("This is a simple egui window.");
-                                });
-                            });
+impl VoxelApp {
+    fn new(window: Rc<Window>, event_loop: &winit::event_loop::EventLoop<()>) -> Self {
+        window
+            .winit
+            .set_cursor_grab(winit::window::CursorGrabMode::Locked)
+            .or_else(|_| {
+                window
+                    .winit
+                    .set_cursor_grab(winit::window::CursorGrabMode::Confined)
+            })
+            .expect("to lock cursor to window");
+        window.winit.set_cursor_visible(false);
 
-                            gui.paint(&display, &mut frame);
+        let program = glium::Program::from_source(
+            &window.display,
+            include_str!("shaders/shader.vert"),
+            include_str!("shaders/shader.frag"),
+            None,
+        )
+        .expect("to compile shaders");
 
-                            frame.finish().expect("to finish drawing");
-                        }
-                        WindowEvent::Resized(window_size) => {
-                            display.resize(window_size.into());
-                            projection.resize(window_size.width as f32, window_size.height as f32);
-                        }
-                        WindowEvent::KeyboardInput {
-                            event:
-                                KeyEvent {
-                                    physical_key: PhysicalKey::Code(key),
-                                    state,
-                                    ..
-                                },
-                            ..
-                        } => {
-                            if key == KeyCode::AltLeft && state == ElementState::Pressed {
-                                is_holding_alt = true;
-                                window.set_cursor_visible(true);
-                            } else if key == KeyCode::AltLeft && state == ElementState::Released {
-                                is_holding_alt = false;
-                                window.set_cursor_visible(false);
-                            }
+        let camera = Camera::new(glam::vec3(0.0, 0.0, 0.0), 0.0, 0.0);
+        let camera_controller = CameraController::new(20.0, 0.5);
 
-                            camera_controller.process_keyboard(key, state);
-                        }
-                        _ => (),
-                    }
-                    let _ = gui.on_event(&window, &event);
+        let projection = {
+            let window_size = window.winit.inner_size();
+            Projection::new(
+                window_size.width as f32 / window_size.height as f32,
+                45.0,
+                0.1,
+                1000.0,
+            )
+        };
+
+        let world_generator = WorldGenerator::new(
+            WorldGeneratorOptions::builder()
+                .seed(1337)
+                .chunk_size(CHUNK_SIZE)
+                .world_size(glam::UVec3::splat(10))
+                .max_terrain_height(CHUNK_SIZE.y * 3)
+                .dirt_layer_thickness(5)
+                .sea_level(CHUNK_SIZE.y)
+                .build(),
+        );
+
+        let world = world_generator.generate_world();
+
+        let mut chunk_solid_buffers = HashMap::new();
+        let mut chunk_transparent_buffers = HashMap::new();
+        let mut chunk_uniforms = HashMap::new();
+
+        for (&position, chunk) in world.iter() {
+            let mut neighbours = HashMap::new();
+            for i in 0..6 {
+                let neighbour_position = position.saturating_add_signed(
+                    quad::QuadFace::from_i64(i as i64)
+                        .expect("to convert primitive to quad face enum")
+                        .into(),
+                );
+                if let Some(neighbour) = world.get(&neighbour_position) {
+                    neighbours.insert(neighbour_position, neighbour);
                 }
-                Event::DeviceEvent {
-                    event: DeviceEvent::MouseMotion { delta },
-                    ..
-                } => {
-                    if !is_holding_alt {
-                        camera_controller.process_mouse(delta.0 as f32, delta.1 as f32);
-                    }
-                }
-                Event::AboutToWait => {
-                    window.request_redraw();
-                }
-                _ => (),
-            };
-        })
-        .expect("to run event loop");
+            }
+
+            let mesh = ChunkMesher::mesh(chunk, neighbours);
+
+            chunk_uniforms.insert(
+                position,
+                (
+                    chunk.transform().model_matrix().to_cols_array_2d(),
+                    chunk.transform().normal_matrix().to_cols_array_2d(),
+                ),
+            );
+
+            chunk_solid_buffers.insert(
+                position,
+                mesh.solid
+                    .as_opengl_buffers(&window.display)
+                    .expect("to create opengl buffers"),
+            );
+
+            if let Some(transparent) = mesh.transparent {
+                chunk_transparent_buffers.insert(
+                    position,
+                    transparent
+                        .as_opengl_buffers(&window.display)
+                        .expect("to create opengl buffers"),
+                );
+            }
+        }
+
+        let egui = egui_glium::EguiGlium::new(
+            ViewportId::ROOT,
+            &window.display,
+            &window.winit,
+            event_loop,
+        );
+
+        Self {
+            window,
+            is_cursor_hidden: true,
+
+            camera,
+            camera_controller,
+            projection,
+
+            program,
+            chunk_solid_buffers,
+            chunk_transparent_buffers,
+            chunk_uniforms,
+
+            egui,
+        }
+    }
+}
+
+fn main() {
+    let mut app = App::new("Voxel", 1280, 720);
+
+    let voxel_app = VoxelApp::new(app.window.clone(), &app.event_loop);
+    app.run(voxel_app);
 }
