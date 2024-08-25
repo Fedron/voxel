@@ -31,9 +31,11 @@ struct VoxelApp {
     camera: Camera,
     camera_controller: CameraController,
     projection: Projection,
-
     default_shader: glium::Program,
-    world_generator: WorldGenerator,
+
+    seed: String,
+    world_size: [String; 3],
+    world_generator_options: WorldGeneratorOptions,
     world: World,
 
     egui: egui_glium::EguiGlium,
@@ -115,9 +117,137 @@ impl AppBehaviour for VoxelApp {
         );
 
         self.egui.run(&self.window.winit, |ctx| {
-            egui::Window::new("Hello World").show(ctx, |ui| {
-                ui.label("Hello World!");
-                ui.label("This is a simple egui window.");
+            egui::Window::new("World Generator").show(ctx, |ui| {
+                ui.label("Seed:");
+
+                let is_seed_valid = self.seed.parse::<u32>().is_ok();
+                if ui
+                    .add(
+                        egui::TextEdit::singleline(&mut self.seed).text_color(if is_seed_valid {
+                            egui::Color32::WHITE
+                        } else {
+                            egui::Color32::RED
+                        }),
+                    )
+                    .lost_focus()
+                    && ui.input(|i| i.key_pressed(egui::Key::Enter))
+                {
+                    if let Ok(seed) = self.seed.parse() {
+                        self.world_generator_options.seed = seed;
+                    }
+                }
+
+                if let Err(_) = self.seed.parse::<u32>() {
+                    ui.label("Seed should be a number.");
+                }
+
+                ui.label("World Size:");
+
+                ui.horizontal(|ui| {
+                    ui.label("X:");
+                    let is_world_size_x_valid = self.world_size[0].parse::<u32>().is_ok();
+                    if ui
+                        .add(
+                            egui::TextEdit::singleline(&mut self.world_size[0])
+                                .desired_width(20.0)
+                                .text_color(if is_world_size_x_valid {
+                                    egui::Color32::WHITE
+                                } else {
+                                    egui::Color32::RED
+                                }),
+                        )
+                        .lost_focus()
+                        && ui.input(|i| i.key_pressed(egui::Key::Enter))
+                    {
+                        if let Ok(x) = self.world_size[0].parse() {
+                            self.world_generator_options.world_size.x = x;
+                        }
+                    }
+
+                    ui.label("Y:");
+                    let is_world_size_y_valid = self.world_size[1].parse::<u32>().is_ok();
+                    if ui
+                        .add(
+                            egui::TextEdit::singleline(&mut self.world_size[1])
+                                .desired_width(20.0)
+                                .text_color(if is_world_size_y_valid {
+                                    egui::Color32::WHITE
+                                } else {
+                                    egui::Color32::RED
+                                }),
+                        )
+                        .lost_focus()
+                        && ui.input(|i| i.key_pressed(egui::Key::Enter))
+                    {
+                        if let Ok(y) = self.world_size[1].parse() {
+                            self.world_generator_options.world_size.y = y;
+                        }
+                    }
+
+                    ui.label("Z:");
+                    let is_world_size_z_valid = self.world_size[2].parse::<u32>().is_ok();
+                    if ui
+                        .add(
+                            egui::TextEdit::singleline(&mut self.world_size[2])
+                                .desired_width(20.0)
+                                .text_color(if is_world_size_z_valid {
+                                    egui::Color32::WHITE
+                                } else {
+                                    egui::Color32::RED
+                                }),
+                        )
+                        .lost_focus()
+                        && ui.input(|i| i.key_pressed(egui::Key::Enter))
+                    {
+                        if let Ok(z) = self.world_size[2].parse() {
+                            self.world_generator_options.world_size.z = z;
+                        }
+                    }
+                });
+
+                ui.add(
+                    egui::Slider::new(
+                        &mut self.world_generator_options.max_terrain_height,
+                        0..=self.world_generator_options.world_size.y
+                            * self.world_generator_options.chunk_size.y,
+                    )
+                    .text("Max Terrain Height"),
+                );
+
+                let max_dirt_layer_thickness = self.world_generator_options.world_size.y
+                    * self.world_generator_options.chunk_size.y
+                    - self.world_generator_options.dirt_layer_thickness
+                    - 1;
+                ui.add(
+                    egui::Slider::new(
+                        &mut self.world_generator_options.dirt_layer_thickness,
+                        0..=max_dirt_layer_thickness,
+                    )
+                    .text("Dirt Layer Thickness"),
+                );
+
+                ui.add(
+                    egui::Slider::new(
+                        &mut self.world_generator_options.sea_level,
+                        0..=self.world_generator_options.world_size.y
+                            * self.world_generator_options.chunk_size.y,
+                    )
+                    .text("Sea Level"),
+                );
+
+                ui.separator();
+
+                if ui
+                    .add(egui::Button::new("Generate"))
+                    .on_hover_ui(|ui| {
+                        ui.label("Generate a new world with the given seed.");
+                    })
+                    .clicked()
+                {
+                    self.world_generator_options.seed = self.seed.parse().expect("to parse seed");
+                    let world_generator = WorldGenerator::new(self.world_generator_options.clone());
+                    self.world = World::new(&self.window, &world_generator);
+                }
             });
         });
 
@@ -159,16 +289,21 @@ impl VoxelApp {
             )
         };
 
-        let world_generator = WorldGenerator::new(
-            WorldGeneratorOptions::builder()
-                .seed(1337)
-                .chunk_size(CHUNK_SIZE)
-                .world_size(glam::UVec3::splat(10))
-                .max_terrain_height(CHUNK_SIZE.y * 3)
-                .dirt_layer_thickness(5)
-                .sea_level(CHUNK_SIZE.y)
-                .build(),
-        );
+        let seed = "1337".to_string();
+        let world_size = ["10".to_string(), "10".to_string(), "10".to_string()];
+        let world_generator_options = WorldGeneratorOptions::builder()
+            .seed(seed.parse().expect("to parse seed"))
+            .chunk_size(CHUNK_SIZE)
+            .world_size(glam::uvec3(
+                world_size[0].parse().expect("to parse world size x"),
+                world_size[1].parse().expect("to parse world size y"),
+                world_size[2].parse().expect("to parse world size z"),
+            ))
+            .max_terrain_height(CHUNK_SIZE.y * 3)
+            .dirt_layer_thickness(5)
+            .sea_level(CHUNK_SIZE.y)
+            .build();
+        let world_generator = WorldGenerator::new(world_generator_options.clone());
 
         let world = World::new(&window, &world_generator);
 
@@ -186,9 +321,11 @@ impl VoxelApp {
             camera,
             camera_controller,
             projection,
-
             default_shader,
-            world_generator,
+
+            seed,
+            world_size,
+            world_generator_options,
             world,
 
             egui,

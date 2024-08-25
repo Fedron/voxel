@@ -6,13 +6,14 @@ use noise::{core::perlin::perlin_2d, permutationtable::PermutationTable};
 use crate::chunk::{Chunk, Voxel};
 
 #[bon::builder]
+#[derive(Debug, Clone)]
 pub struct WorldGeneratorOptions {
-    seed: u32,
-    chunk_size: glam::UVec3,
-    world_size: glam::UVec3,
-    max_terrain_height: u32,
-    dirt_layer_thickness: u32,
-    sea_level: u32,
+    pub seed: u32,
+    pub chunk_size: glam::UVec3,
+    pub world_size: glam::UVec3,
+    pub max_terrain_height: u32,
+    pub dirt_layer_thickness: u32,
+    pub sea_level: u32,
 }
 
 pub struct WorldGenerator {
