@@ -1,5 +1,11 @@
 use glium::glutin::surface::WindowSurface;
 
+pub struct DefaultUniforms {
+    pub view_projection: [[f32; 4]; 4],
+    pub light_color: [f32; 3],
+    pub light_position: [f32; 3],
+}
+
 #[derive(Copy, Clone)]
 pub struct Vertex {
     pub position: [f32; 3],
