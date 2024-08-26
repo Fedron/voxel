@@ -6,6 +6,7 @@ use app::{App, AppBehaviour, Window};
 use camera::{Camera, CameraController, Projection};
 use chunk::{VoxelUniforms, CHUNK_SIZE};
 use generator::{WorldGenerator, WorldGeneratorOptions};
+use glium::Surface;
 use sky_dome::SkyDome;
 use ui::WorldGeneratorUi;
 use winit::{
@@ -114,6 +115,8 @@ impl AppBehaviour for VoxelApp {
     fn render(&mut self, frame: &mut glium::Frame) {
         self.window.winit.set_cursor_visible(!self.is_cursor_hidden);
 
+        frame.clear_color_srgb(0.71, 0.85, 0.90, 1.0);
+
         let view_projection = self.projection.matrix() * self.camera.view_matrix();
 
         self.world.draw(
@@ -153,7 +156,15 @@ impl VoxelApp {
         )
         .expect("to compile default shaders");
 
-        let camera = Camera::new(glam::vec3(0.0, 0.0, 0.0), 0.0, 0.0);
+        let camera = Camera::new(
+            glam::vec3(
+                CHUNK_SIZE.x as f32 * -5.0,
+                CHUNK_SIZE.y as f32 * 5.0,
+                CHUNK_SIZE.z as f32 * 2.5,
+            ),
+            0.0,
+            -30.0f32.to_radians(),
+        );
         let camera_controller = CameraController::new(20.0, 0.5);
 
         let projection = {
