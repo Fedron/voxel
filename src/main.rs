@@ -39,6 +39,8 @@ struct VoxelApp {
     voxel_shader: glium::Program,
     world: World,
     world_generator_ui: WorldGeneratorUi,
+
+    render_wireframe: bool,
 }
 
 impl AppBehaviour for VoxelApp {
@@ -74,6 +76,10 @@ impl AppBehaviour for VoxelApp {
                             self.is_cursor_hidden = false;
                         } else if key == KeyCode::AltLeft && state == ElementState::Released {
                             self.is_cursor_hidden = true;
+                        }
+
+                        if key == KeyCode::F3 && state == ElementState::Pressed {
+                            self.render_wireframe = !self.render_wireframe;
                         }
 
                         self.camera_controller.process_keyboard(key, state);
@@ -127,6 +133,7 @@ impl AppBehaviour for VoxelApp {
                 light_color: [1.0, 1.0, 1.0],
                 light_position: [100.0, 100.0, 100.0],
             },
+            self.render_wireframe,
         );
 
         self.sky_dome.draw(frame, view_projection);
@@ -206,6 +213,8 @@ impl VoxelApp {
             voxel_shader,
             world,
             world_generator_ui,
+
+            render_wireframe: false,
         }
     }
 }

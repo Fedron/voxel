@@ -76,7 +76,13 @@ impl World {
         }
     }
 
-    pub fn draw(&self, frame: &mut glium::Frame, shader: &glium::Program, uniforms: VoxelUniforms) {
+    pub fn draw(
+        &self,
+        frame: &mut glium::Frame,
+        shader: &glium::Program,
+        uniforms: VoxelUniforms,
+        draw_wireframe: bool,
+    ) {
         for (position, (vertices, indices)) in self.chunk_solid_buffers.iter() {
             let (model, normal) = self.chunk_uniforms.get(position).unwrap();
             frame
@@ -92,6 +98,11 @@ impl World {
                         light_position: uniforms.light_position
                     },
                     &DrawParameters {
+                        polygon_mode: if draw_wireframe {
+                            glium::draw_parameters::PolygonMode::Line
+                        } else {
+                            glium::draw_parameters::PolygonMode::Fill
+                        },
                         depth: glium::Depth {
                             test: glium::draw_parameters::DepthTest::IfLess,
                             write: true,
@@ -121,6 +132,11 @@ impl World {
                         light_position: uniforms.light_position
                     },
                     &DrawParameters {
+                        polygon_mode: if draw_wireframe {
+                            glium::draw_parameters::PolygonMode::Line
+                        } else {
+                            glium::draw_parameters::PolygonMode::Fill
+                        },
                         depth: glium::Depth {
                             test: glium::draw_parameters::DepthTest::IfLess,
                             write: true,
