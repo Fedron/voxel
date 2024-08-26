@@ -1,4 +1,4 @@
-use crate::mesh::{Mesh, Vertex};
+use crate::{chunk::VoxelVertex, mesh::Mesh};
 
 pub struct QuadFaceOptions {
     pub half_size: f32,
@@ -49,7 +49,7 @@ impl Into<[f32; 3]> for QuadFace {
 }
 
 impl QuadFace {
-    pub fn as_mesh(&self, options: QuadFaceOptions) -> Mesh {
+    pub fn as_mesh(&self, options: QuadFaceOptions) -> Mesh<VoxelVertex> {
         let indices = vec![
             options.base_index,
             options.base_index + 1,
@@ -60,7 +60,7 @@ impl QuadFace {
         ];
         let create_vertex = |quad_vertex: QuadVertex| {
             let position: [f32; 3] = quad_vertex.into();
-            Vertex {
+            VoxelVertex {
                 position: [
                     position[0] * options.half_size + options.base_position[0],
                     position[1] * options.half_size + options.base_position[1],

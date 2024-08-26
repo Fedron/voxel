@@ -5,9 +5,8 @@ use num_traits::FromPrimitive;
 
 use crate::{
     app::Window,
-    chunk::ChunkMesher,
+    chunk::{ChunkMesher, VoxelUniforms, VoxelVertex},
     generator::WorldGenerator,
-    mesh::{DefaultUniforms, Vertex},
     quad::QuadFace,
 };
 
@@ -16,9 +15,9 @@ type NormalMatrix = [[f32; 3]; 3];
 
 pub struct World {
     chunk_solid_buffers:
-        HashMap<glam::UVec3, (glium::VertexBuffer<Vertex>, glium::IndexBuffer<u32>)>,
+        HashMap<glam::UVec3, (glium::VertexBuffer<VoxelVertex>, glium::IndexBuffer<u32>)>,
     chunk_transparent_buffers:
-        HashMap<glam::UVec3, (glium::VertexBuffer<Vertex>, glium::IndexBuffer<u32>)>,
+        HashMap<glam::UVec3, (glium::VertexBuffer<VoxelVertex>, glium::IndexBuffer<u32>)>,
     chunk_uniforms: HashMap<glam::UVec3, (ModelMatrix, NormalMatrix)>,
 }
 
@@ -77,12 +76,7 @@ impl World {
         }
     }
 
-    pub fn draw(
-        &self,
-        frame: &mut glium::Frame,
-        shader: &glium::Program,
-        uniforms: DefaultUniforms,
-    ) {
+    pub fn draw(&self, frame: &mut glium::Frame, shader: &glium::Program, uniforms: VoxelUniforms) {
         for (position, (vertices, indices)) in self.chunk_solid_buffers.iter() {
             let (model, normal) = self.chunk_uniforms.get(position).unwrap();
             frame

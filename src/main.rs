@@ -4,9 +4,8 @@ use std::rc::Rc;
 
 use app::{App, AppBehaviour, Window};
 use camera::{Camera, CameraController, Projection};
-use chunk::CHUNK_SIZE;
+use chunk::{VoxelUniforms, CHUNK_SIZE};
 use generator::{WorldGenerator, WorldGeneratorOptions};
-use mesh::DefaultUniforms;
 use sky_dome::SkyDome;
 use ui::WorldGeneratorUi;
 use winit::{
@@ -34,9 +33,9 @@ struct VoxelApp {
     camera: Camera,
     camera_controller: CameraController,
     projection: Projection,
-    default_shader: glium::Program,
 
     sky_dome: SkyDome,
+    voxel_shader: glium::Program,
     world: World,
     world_generator_ui: WorldGeneratorUi,
 }
@@ -119,8 +118,8 @@ impl AppBehaviour for VoxelApp {
 
         self.world.draw(
             frame,
-            &self.default_shader,
-            DefaultUniforms {
+            &self.voxel_shader,
+            VoxelUniforms {
                 view_projection: view_projection.to_cols_array_2d(),
                 light_color: [1.0, 1.0, 1.0],
                 light_position: [100.0, 100.0, 100.0],
@@ -146,10 +145,10 @@ impl VoxelApp {
             .expect("to lock cursor to window");
         window.winit.set_cursor_visible(false);
 
-        let default_shader = glium::Program::from_source(
+        let voxel_shader = glium::Program::from_source(
             &window.display,
-            include_str!("shaders/shader.vert"),
-            include_str!("shaders/shader.frag"),
+            include_str!("shaders/voxel.vert"),
+            include_str!("shaders/voxel.frag"),
             None,
         )
         .expect("to compile default shaders");
@@ -191,9 +190,9 @@ impl VoxelApp {
             camera,
             camera_controller,
             projection,
-            default_shader,
 
             sky_dome,
+            voxel_shader,
             world,
             world_generator_ui,
         }

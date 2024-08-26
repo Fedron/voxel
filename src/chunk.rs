@@ -9,6 +9,20 @@ use crate::{
     utils::{coord_to_index, index_to_coord},
 };
 
+pub struct VoxelUniforms {
+    pub view_projection: [[f32; 4]; 4],
+    pub light_color: [f32; 3],
+    pub light_position: [f32; 3],
+}
+
+#[derive(Copy, Clone)]
+pub struct VoxelVertex {
+    pub position: [f32; 3],
+    pub normal: [f32; 3],
+    pub color: VoxelColor,
+}
+implement_vertex!(VoxelVertex, position, normal, color);
+
 pub type VoxelColor = [f32; 4];
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -125,8 +139,8 @@ impl<'a> Iterator for ChunkIterator<'a> {
 }
 
 pub struct ChunkMesh {
-    pub solid: Mesh,
-    pub transparent: Option<Mesh>,
+    pub solid: Mesh<VoxelVertex>,
+    pub transparent: Option<Mesh<VoxelVertex>>,
 }
 
 pub struct ChunkMesher {}
