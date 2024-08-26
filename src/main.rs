@@ -7,6 +7,7 @@ use camera::{Camera, CameraController, Projection};
 use chunk::CHUNK_SIZE;
 use generator::{WorldGenerator, WorldGeneratorOptions};
 use mesh::DefaultUniforms;
+use sky_dome::SkyDome;
 use ui::WorldGeneratorUi;
 use winit::{
     event::{DeviceEvent, ElementState, Event, KeyEvent, WindowEvent},
@@ -20,6 +21,7 @@ mod chunk;
 mod generator;
 mod mesh;
 mod quad;
+mod sky_dome;
 mod transform;
 mod ui;
 mod utils;
@@ -34,6 +36,7 @@ struct VoxelApp {
     projection: Projection,
     default_shader: glium::Program,
 
+    sky_dome: SkyDome,
     world: World,
     world_generator_ui: WorldGeneratorUi,
 }
@@ -98,6 +101,8 @@ impl AppBehaviour for VoxelApp {
         self.camera_controller
             .update_camera(&mut self.camera, delta_time.as_secs_f32());
 
+        self.sky_dome.position = self.camera.position - glam::vec3(0.0, 200.0, 0.0);
+
         if self.world_generator_ui.should_generate_world {
             self.world_generator_ui.should_generate_world = false;
 
@@ -110,16 +115,19 @@ impl AppBehaviour for VoxelApp {
     fn render(&mut self, frame: &mut glium::Frame) {
         self.window.winit.set_cursor_visible(!self.is_cursor_hidden);
 
+        let view_projection = self.projection.matrix() * self.camera.view_matrix();
+
         self.world.draw(
             frame,
             &self.default_shader,
             DefaultUniforms {
-                view_projection: (self.projection.matrix() * self.camera.view_matrix())
-                    .to_cols_array_2d(),
+                view_projection: view_projection.to_cols_array_2d(),
                 light_color: [1.0, 1.0, 1.0],
                 light_position: [100.0, 100.0, 100.0],
             },
         );
+
+        self.sky_dome.draw(frame, view_projection);
 
         self.world_generator_ui.render(frame);
     }
@@ -159,16 +167,12 @@ impl VoxelApp {
             )
         };
 
-        let seed = "1337".to_string();
-        let world_size = ["10".to_string(), "10".to_string(), "10".to_string()];
+        let sky_dome = SkyDome::new(&window.display, 20, 20, 500.0);
+
         let world_generator_options = WorldGeneratorOptions::builder()
-            .seed(seed.parse().expect("to parse seed"))
+            .seed(1337)
             .chunk_size(CHUNK_SIZE)
-            .world_size(glam::uvec3(
-                world_size[0].parse().expect("to parse world size x"),
-                world_size[1].parse().expect("to parse world size y"),
-                world_size[2].parse().expect("to parse world size z"),
-            ))
+            .world_size(glam::UVec3::splat(5))
             .max_terrain_height(CHUNK_SIZE.y * 3)
             .dirt_layer_thickness(5)
             .sea_level(CHUNK_SIZE.y)
@@ -189,6 +193,7 @@ impl VoxelApp {
             projection,
             default_shader,
 
+            sky_dome,
             world,
             world_generator_ui,
         }
@@ -196,7 +201,7 @@ impl VoxelApp {
 }
 
 fn main() {
-    let mut app = App::new("Voxel", 1280, 720);
+    let mut app = App::new("Voxel", 1920, 1080);
 
     let voxel_app = VoxelApp::new(app.window.clone(), &app.event_loop);
     app.run(voxel_app);
