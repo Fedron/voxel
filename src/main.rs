@@ -19,8 +19,6 @@ mod app;
 mod camera;
 mod chunk;
 mod generator;
-mod mesh;
-mod quad;
 mod sky_dome;
 mod transform;
 mod ui;

@@ -1,10 +1,10 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
-use num_traits::FromPrimitive;
+use mesh::{Axis, Direction, Mesh};
+
+pub mod mesh;
 
 use crate::{
-    mesh::Mesh,
-    quad::{QuadFace, QuadFaceOptions},
     transform::Transform,
     utils::{coord_to_index, index_to_coord},
 };
@@ -138,23 +138,16 @@ impl<'a> Iterator for ChunkIterator<'a> {
     }
 }
 
-pub struct ChunkMesh {
-    pub solid: Mesh<VoxelVertex>,
-    pub transparent: Option<Mesh<VoxelVertex>>,
-}
-
 pub struct ChunkMesher {}
 
 impl ChunkMesher {
-    pub fn mesh(chunk: &Chunk, neighbours: HashMap<glam::UVec3, &Chunk>) -> ChunkMesh {
-        let mut solid_vertices = vec![];
-        let mut solid_indices = vec![];
-        let mut transparent_vertices = vec![];
-        let mut transparent_indices = vec![];
+    pub fn mesh(chunk: &Chunk, neighbours: HashMap<glam::UVec3, &Chunk>) -> Mesh {
+        let mut mesh = Mesh::new();
 
+        // TODO: If this meshing is kept, transparency will need to be reimplemented
         for (voxel, index) in chunk.iter() {
             match voxel {
-                Voxel::Stone | Voxel::Grass | Voxel::Dirt | Voxel::Sand => {
+                Voxel::Stone | Voxel::Grass | Voxel::Dirt | Voxel::Sand | Voxel::Water => {
                     let neighbours = Self::get_neighbouring_voxels(
                         chunk,
                         &neighbours,
@@ -167,42 +160,52 @@ impl ChunkMesher {
                             let position = index_to_coord(index, CHUNK_SIZE);
                             let base_position =
                                 glam::vec3(position.x as f32, position.y as f32, position.z as f32);
-                            let mesh = QuadFace::from_i64(i as i64)
-                                .expect("to convert primitive to quad face enum")
-                                .as_mesh(QuadFaceOptions {
-                                    base_position: base_position.into(),
-                                    half_size: 0.5,
-                                    color: (*voxel).into(),
-                                    base_index: solid_vertices.len() as u32,
-                                });
-                            solid_vertices.extend(mesh.vertices);
-                            solid_indices.extend(mesh.indices);
-                        }
-                    }
-                }
-                Voxel::Water => {
-                    let neighbours = Self::get_neighbouring_voxels(
-                        chunk,
-                        &neighbours,
-                        index_to_coord(index, CHUNK_SIZE).as_ivec3(),
-                        Voxel::is_air,
-                    );
 
-                    for i in 0..6 {
-                        if (neighbours >> i) & 1 == 1 {
-                            let position = index_to_coord(index, CHUNK_SIZE);
-                            let base_position =
-                                glam::vec3(position.x as f32, position.y as f32, position.z as f32);
-                            let mesh = QuadFace::from_i64(i as i64)
-                                .expect("to convert primitive to quad face enum")
-                                .as_mesh(QuadFaceOptions {
-                                    base_position: base_position.into(),
-                                    half_size: 0.5,
-                                    color: (*voxel).into(),
-                                    base_index: transparent_vertices.len() as u32,
-                                });
-                            transparent_vertices.extend(mesh.vertices);
-                            transparent_indices.extend(mesh.indices);
+                            match i {
+                                0 => mesh.add_face(
+                                    base_position,
+                                    glam::vec2(1.0, 1.0),
+                                    Axis::Z,
+                                    Direction::Negative,
+                                    Into::<VoxelColor>::into(*voxel),
+                                ),
+                                1 => mesh.add_face(
+                                    base_position + glam::vec3(0.0, 0.0, 1.0),
+                                    glam::vec2(1.0, 1.0),
+                                    Axis::Z,
+                                    Direction::Positive,
+                                    Into::<VoxelColor>::into(*voxel),
+                                ),
+                                2 => mesh.add_face(
+                                    base_position + glam::vec3(0.0, 1.0, 0.0),
+                                    glam::vec2(1.0, 1.0),
+                                    Axis::Y,
+                                    Direction::Positive,
+                                    Into::<VoxelColor>::into(*voxel),
+                                ),
+                                3 => mesh.add_face(
+                                    base_position,
+                                    glam::vec2(1.0, 1.0),
+                                    Axis::Y,
+                                    Direction::Negative,
+                                    Into::<VoxelColor>::into(*voxel),
+                                ),
+                                4 => mesh.add_face(
+                                    base_position,
+                                    glam::vec2(1.0, 1.0),
+                                    Axis::X,
+                                    Direction::Negative,
+                                    Into::<VoxelColor>::into(*voxel),
+                                ),
+                                5 => mesh.add_face(
+                                    base_position + glam::vec3(1.0, 0.0, 0.0),
+                                    glam::vec2(1.0, 1.0),
+                                    Axis::X,
+                                    Direction::Positive,
+                                    Into::<VoxelColor>::into(*voxel),
+                                ),
+                                _ => {}
+                            }
                         }
                     }
                 }
@@ -210,22 +213,7 @@ impl ChunkMesher {
             }
         }
 
-        let transparent_mesh = if transparent_vertices.is_empty() {
-            None
-        } else {
-            Some(Mesh {
-                vertices: transparent_vertices,
-                indices: transparent_indices,
-            })
-        };
-
-        ChunkMesh {
-            solid: Mesh {
-                vertices: solid_vertices,
-                indices: solid_indices,
-            },
-            transparent: transparent_mesh,
-        }
+        mesh
     }
 
     fn get_neighbouring_voxels<C>(
@@ -239,9 +227,16 @@ impl ChunkMesher {
     {
         let mut mask = 0;
         for i in 0..6 {
-            let face_direction: glam::IVec3 = QuadFace::from_i64(i as i64)
-                .expect("to convert primitive to quad face enum")
-                .into();
+            let face_direction = match i {
+                0 => Axis::Z.get_normal(Direction::Negative),
+                1 => Axis::Z.get_normal(Direction::Positive),
+                2 => Axis::Y.get_normal(Direction::Positive),
+                3 => Axis::Y.get_normal(Direction::Negative),
+                4 => Axis::X.get_normal(Direction::Negative),
+                5 => Axis::X.get_normal(Direction::Positive),
+                _ => unreachable!(),
+            }
+            .as_ivec3();
 
             // If neighbour is within the same chunk, check voxel in the chunk
             let neighbour_position = voxel_position + face_direction;
@@ -311,5 +306,115 @@ impl ChunkMesher {
             }
         }
         mask
+    }
+
+    pub fn greedy_mesh(chunk: &Chunk) -> Mesh {
+        let mut mesh = Mesh::new();
+
+        for axis in [Axis::X, Axis::Y, Axis::Z] {
+            for direction in [Direction::Positive, Direction::Negative] {
+                let mut visited = HashSet::new();
+
+                let plane_dimensions = match axis {
+                    Axis::X => glam::uvec2(chunk.size.y, chunk.size.z),
+                    Axis::Y => glam::uvec2(chunk.size.x, chunk.size.z),
+                    Axis::Z => glam::uvec2(chunk.size.x, chunk.size.y),
+                };
+
+                for x in 0..chunk.size.x {
+                    for y in 0..chunk.size.y {
+                        for z in 0..chunk.size.z {
+                            let position = glam::uvec3(x, y, z);
+                            let voxel = chunk.get_voxel(position);
+                            if visited.contains(&position) || voxel.is_none() {
+                                continue;
+                            } else if let Some(voxel) = voxel {
+                                if voxel.is_air() {
+                                    continue;
+                                }
+                            }
+
+                            // TODO: Will throw error if neighbour position overflows u32
+                            let neighbour_voxel = chunk.get_voxel(
+                                (position.as_vec3() + axis.get_normal(direction)).as_uvec3(),
+                            );
+                            if let Some(neighbour_voxel) = neighbour_voxel {
+                                if !neighbour_voxel.is_air() {
+                                    continue;
+                                }
+                            }
+
+                            let plane = match axis {
+                                Axis::X => glam::uvec2(y, z),
+                                Axis::Y => glam::uvec2(x, z),
+                                Axis::Z => glam::uvec2(x, y),
+                            };
+                            let mut size = glam::uvec2(1, 1);
+                            while plane.x + size.x < plane_dimensions.x {
+                                let next_position = match axis {
+                                    Axis::X => glam::uvec3(x, y + size.x, z),
+                                    Axis::Y => glam::uvec3(x + size.x, y, z),
+                                    Axis::Z => glam::uvec3(x + size.x, y, z),
+                                };
+
+                                let next_voxel = chunk.get_voxel(next_position);
+                                if visited.contains(&next_position)
+                                    || next_voxel.is_none()
+                                    || next_voxel != voxel
+                                {
+                                    break;
+                                }
+
+                                size.x += 1;
+                            }
+
+                            'outer: while plane.y + size.y < plane_dimensions.y {
+                                for w in 0..size.x {
+                                    let next_position = match axis {
+                                        Axis::X => glam::uvec3(x, y + w, z + size.y),
+                                        Axis::Y => glam::uvec3(x + w, y, z + size.y),
+                                        Axis::Z => glam::uvec3(x + w, y + size.y, z),
+                                    };
+
+                                    let next_voxel = chunk.get_voxel(next_position);
+                                    if visited.contains(&next_position)
+                                        || next_voxel.is_none()
+                                        || next_voxel != voxel
+                                    {
+                                        break 'outer;
+                                    }
+                                }
+                                size.y += 1;
+                            }
+
+                            mesh.add_face(
+                                position.as_vec3()
+                                    + match direction {
+                                        Direction::Positive => axis.get_normal(direction),
+                                        Direction::Negative => glam::Vec3::ZERO,
+                                    },
+                                size.as_vec2(),
+                                axis,
+                                direction,
+                                Into::<VoxelColor>::into(*voxel.unwrap()),
+                            );
+
+                            for w in 0..size.x {
+                                for h in 0..size.y {
+                                    let visited_position = match axis {
+                                        Axis::X => glam::uvec3(x, y + w, z + h),
+                                        Axis::Y => glam::uvec3(x + w, y, z + h),
+                                        Axis::Z => glam::uvec3(x + w, y + h, z),
+                                    };
+                                    visited.insert(visited_position);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        mesh
     }
 }

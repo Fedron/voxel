@@ -1,41 +1,50 @@
 use std::collections::HashMap;
 
 use glium::{DrawParameters, Surface};
-use num_traits::FromPrimitive;
 
 use crate::{
     app::Window,
-    chunk::{ChunkMesher, VoxelUniforms, VoxelVertex},
+    chunk::{
+        mesh::{Axis, Direction, Vertex},
+        ChunkMesher, VoxelUniforms, CHUNK_SIZE,
+    },
     generator::WorldGenerator,
-    quad::QuadFace,
 };
 
 type ModelMatrix = [[f32; 4]; 4];
 type NormalMatrix = [[f32; 3]; 3];
 
 pub struct World {
-    chunk_solid_buffers:
-        HashMap<glam::UVec3, (glium::VertexBuffer<VoxelVertex>, glium::IndexBuffer<u32>)>,
-    chunk_transparent_buffers:
-        HashMap<glam::UVec3, (glium::VertexBuffer<VoxelVertex>, glium::IndexBuffer<u32>)>,
+    chunk_buffers: HashMap<glam::UVec3, (glium::VertexBuffer<Vertex>, glium::IndexBuffer<u32>)>,
     chunk_uniforms: HashMap<glam::UVec3, (ModelMatrix, NormalMatrix)>,
+    chunk_greedy_buffers:
+        HashMap<glam::UVec3, (glium::VertexBuffer<Vertex>, glium::IndexBuffer<u32>)>,
+    chunk_greedy_uniforms: HashMap<glam::UVec3, (ModelMatrix, NormalMatrix)>,
 }
 
 impl World {
     pub fn new(window: &Window, generator: &WorldGenerator) -> Self {
         let world = generator.generate_world();
 
-        let mut chunk_solid_buffers = HashMap::new();
-        let mut chunk_transparent_buffers = HashMap::new();
+        let mut chunk_buffers = HashMap::new();
         let mut chunk_uniforms = HashMap::new();
+        let mut chunk_greedy_buffers = HashMap::new();
+        let mut chunk_greedy_uniforms = HashMap::new();
 
         for (&position, chunk) in world.iter() {
             let mut neighbours = HashMap::new();
             for i in 0..6 {
                 let neighbour_position = position.saturating_add_signed(
-                    QuadFace::from_i64(i as i64)
-                        .expect("to convert primitive to quad face enum")
-                        .into(),
+                    match i {
+                        0 => Axis::Z.get_normal(Direction::Negative),
+                        1 => Axis::Z.get_normal(Direction::Positive),
+                        2 => Axis::Y.get_normal(Direction::Positive),
+                        3 => Axis::Y.get_normal(Direction::Negative),
+                        4 => Axis::X.get_normal(Direction::Negative),
+                        5 => Axis::X.get_normal(Direction::Positive),
+                        _ => unreachable!(),
+                    }
+                    .as_ivec3(),
                 );
                 if let Some(neighbour) = world.get(&neighbour_position) {
                     neighbours.insert(neighbour_position, neighbour);
@@ -43,8 +52,27 @@ impl World {
             }
 
             let mesh = ChunkMesher::mesh(chunk, neighbours);
+            let greedy_mesh = ChunkMesher::greedy_mesh(chunk);
 
+            let mut transform = chunk.transform();
+            transform.position.x += CHUNK_SIZE.x as f32 * 6.0;
             chunk_uniforms.insert(
+                position,
+                (
+                    transform.model_matrix().to_cols_array_2d(),
+                    transform.normal_matrix().to_cols_array_2d(),
+                ),
+            );
+
+            chunk_buffers.insert(
+                position,
+                (
+                    mesh.vertex_buffer(&window.display).unwrap(),
+                    mesh.index_buffer(&window.display).unwrap(),
+                ),
+            );
+
+            chunk_greedy_uniforms.insert(
                 position,
                 (
                     chunk.transform().model_matrix().to_cols_array_2d(),
@@ -52,27 +80,20 @@ impl World {
                 ),
             );
 
-            chunk_solid_buffers.insert(
+            chunk_greedy_buffers.insert(
                 position,
-                mesh.solid
-                    .as_opengl_buffers(&window.display)
-                    .expect("to create opengl buffers"),
+                (
+                    greedy_mesh.vertex_buffer(&window.display).unwrap(),
+                    greedy_mesh.index_buffer(&window.display).unwrap(),
+                ),
             );
-
-            if let Some(transparent) = mesh.transparent {
-                chunk_transparent_buffers.insert(
-                    position,
-                    transparent
-                        .as_opengl_buffers(&window.display)
-                        .expect("to create opengl buffers"),
-                );
-            }
         }
 
         Self {
-            chunk_solid_buffers,
-            chunk_transparent_buffers,
+            chunk_buffers,
             chunk_uniforms,
+            chunk_greedy_buffers,
+            chunk_greedy_uniforms,
         }
     }
 
@@ -83,7 +104,7 @@ impl World {
         uniforms: VoxelUniforms,
         draw_wireframe: bool,
     ) {
-        for (position, (vertices, indices)) in self.chunk_solid_buffers.iter() {
+        for (position, (vertices, indices)) in self.chunk_buffers.iter() {
             let (model, normal) = self.chunk_uniforms.get(position).unwrap();
             frame
                 .draw(
@@ -109,7 +130,7 @@ impl World {
                             ..Default::default()
                         },
                         backface_culling:
-                            glium::draw_parameters::BackfaceCullingMode::CullClockwise,
+                            glium::draw_parameters::BackfaceCullingMode::CullCounterClockwise,
                         blend: glium::Blend::alpha_blending(),
                         ..Default::default()
                     },
@@ -117,8 +138,8 @@ impl World {
                 .expect("to draw vertices");
         }
 
-        for (position, (vertices, indices)) in self.chunk_transparent_buffers.iter() {
-            let (model, normal) = self.chunk_uniforms.get(position).unwrap();
+        for (position, (vertices, indices)) in self.chunk_greedy_buffers.iter() {
+            let (model, normal) = self.chunk_greedy_uniforms.get(position).unwrap();
             frame
                 .draw(
                     vertices,
@@ -143,7 +164,7 @@ impl World {
                             ..Default::default()
                         },
                         backface_culling:
-                            glium::draw_parameters::BackfaceCullingMode::CullClockwise,
+                            glium::draw_parameters::BackfaceCullingMode::CullCounterClockwise,
                         blend: glium::Blend::alpha_blending(),
                         ..Default::default()
                     },
