@@ -53,7 +53,10 @@ impl World {
 
                 let (solid_mesh, transparent_mesh) = ChunkMesher::mesh(chunk, &neighbours);
 
-                solid_meshes.insert((position.x, position.y, position.z), solid_mesh);
+                if let Some(solid_mesh) = solid_mesh {
+                    solid_meshes.insert((position.x, position.y, position.z), solid_mesh);
+                }
+
                 if let Some(transparent_mesh) = transparent_mesh {
                     transparent_meshes
                         .insert((position.x, position.y, position.z), transparent_mesh);

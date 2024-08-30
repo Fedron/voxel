@@ -115,16 +115,27 @@ impl Chunk {
 pub struct ChunkMesher {}
 
 impl ChunkMesher {
+    /// Generates a mesh for the chunk.
+    ///
+    /// Returns a tuple of two optional meshes. The first mesh is the solid mesh and the second mesh is the transparent mesh.
     pub fn mesh(
         chunk: &Chunk,
         chunk_neighbours: &HashMap<glam::UVec3, &Chunk>,
-    ) -> (Mesh, Option<Mesh>) {
-        let mesh = Self::greedy_mesh(
-            chunk,
-            chunk_neighbours,
-            |voxel| voxel.is_solid(),
-            |voxel| !voxel.is_solid(),
-        );
+    ) -> (Option<Mesh>, Option<Mesh>) {
+        let mesh = {
+            let mesh = Self::greedy_mesh(
+                chunk,
+                chunk_neighbours,
+                |voxel| voxel.is_solid(),
+                |voxel| !voxel.is_solid(),
+            );
+            if mesh.is_empty() {
+                None
+            } else {
+                Some(mesh)
+            }
+        };
+
         let transparent_mesh = {
             let mesh = Self::greedy_mesh(
                 chunk,
