@@ -51,6 +51,10 @@ impl Mesh {
         }
     }
 
+    pub fn is_empty(&self) -> bool {
+        self.vertices.is_empty() || self.indices.is_empty()
+    }
+
     pub fn vertex_buffer(
         &self,
         display: &glium::Display<glium::glutin::surface::WindowSurface>,

@@ -6,7 +6,7 @@ use crate::{
     app::Window,
     chunk::{
         mesh::{Axis, Direction, Vertex},
-        ChunkMesher, VoxelUniforms, CHUNK_SIZE,
+        ChunkMesher, VoxelUniforms,
     },
     generator::WorldGenerator,
 };
@@ -15,21 +15,20 @@ type ModelMatrix = [[f32; 4]; 4];
 type NormalMatrix = [[f32; 3]; 3];
 
 pub struct World {
-    chunk_buffers: HashMap<glam::UVec3, (glium::VertexBuffer<Vertex>, glium::IndexBuffer<u32>)>,
-    chunk_uniforms: HashMap<glam::UVec3, (ModelMatrix, NormalMatrix)>,
-    chunk_greedy_buffers:
+    chunk_solid_buffers:
         HashMap<glam::UVec3, (glium::VertexBuffer<Vertex>, glium::IndexBuffer<u32>)>,
-    chunk_greedy_uniforms: HashMap<glam::UVec3, (ModelMatrix, NormalMatrix)>,
+    chunk_transparent_buffers:
+        HashMap<glam::UVec3, (glium::VertexBuffer<Vertex>, glium::IndexBuffer<u32>)>,
+    chunk_uniforms: HashMap<glam::UVec3, (ModelMatrix, NormalMatrix)>,
 }
 
 impl World {
     pub fn new(window: &Window, generator: &WorldGenerator) -> Self {
         let world = generator.generate_world();
 
-        let mut chunk_buffers = HashMap::new();
+        let mut chunk_solid_buffers = HashMap::new();
+        let mut chunk_transparent_buffers = HashMap::new();
         let mut chunk_uniforms = HashMap::new();
-        let mut chunk_greedy_buffers = HashMap::new();
-        let mut chunk_greedy_uniforms = HashMap::new();
 
         for (&position, chunk) in world.iter() {
             let mut neighbours = HashMap::new();
@@ -47,49 +46,38 @@ impl World {
                 }
             }
 
-            let mesh = ChunkMesher::mesh(chunk, neighbours.clone());
-            let greedy_mesh = ChunkMesher::greedy_mesh(chunk, &neighbours);
+            let (solid_mesh, transparent_mesh) = ChunkMesher::mesh(chunk, &neighbours);
+            chunk_solid_buffers.insert(
+                position,
+                (
+                    solid_mesh.vertex_buffer(&window.display).unwrap(),
+                    solid_mesh.index_buffer(&window.display).unwrap(),
+                ),
+            );
 
-            let mut transform = chunk.transform();
-            transform.position.x += CHUNK_SIZE.x as f32 * 6.0;
+            if let Some(transparent_mesh) = transparent_mesh {
+                chunk_transparent_buffers.insert(
+                    position,
+                    (
+                        transparent_mesh.vertex_buffer(&window.display).unwrap(),
+                        transparent_mesh.index_buffer(&window.display).unwrap(),
+                    ),
+                );
+            }
+
             chunk_uniforms.insert(
-                position,
-                (
-                    transform.model_matrix().to_cols_array_2d(),
-                    transform.normal_matrix().to_cols_array_2d(),
-                ),
-            );
-
-            chunk_buffers.insert(
-                position,
-                (
-                    mesh.vertex_buffer(&window.display).unwrap(),
-                    mesh.index_buffer(&window.display).unwrap(),
-                ),
-            );
-
-            chunk_greedy_uniforms.insert(
                 position,
                 (
                     chunk.transform().model_matrix().to_cols_array_2d(),
                     chunk.transform().normal_matrix().to_cols_array_2d(),
                 ),
             );
-
-            chunk_greedy_buffers.insert(
-                position,
-                (
-                    greedy_mesh.vertex_buffer(&window.display).unwrap(),
-                    greedy_mesh.index_buffer(&window.display).unwrap(),
-                ),
-            );
         }
 
         Self {
-            chunk_buffers,
+            chunk_solid_buffers,
+            chunk_transparent_buffers,
             chunk_uniforms,
-            chunk_greedy_buffers,
-            chunk_greedy_uniforms,
         }
     }
 
@@ -100,8 +88,9 @@ impl World {
         uniforms: VoxelUniforms,
         draw_wireframe: bool,
     ) {
-        for (position, (vertices, indices)) in self.chunk_buffers.iter() {
+        for (position, (vertices, indices)) in self.chunk_solid_buffers.iter() {
             let (model, normal) = self.chunk_uniforms.get(position).unwrap();
+
             frame
                 .draw(
                     vertices,
@@ -134,8 +123,9 @@ impl World {
                 .expect("to draw vertices");
         }
 
-        for (position, (vertices, indices)) in self.chunk_greedy_buffers.iter() {
-            let (model, normal) = self.chunk_greedy_uniforms.get(position).unwrap();
+        for (position, (vertices, indices)) in self.chunk_transparent_buffers.iter() {
+            let (model, normal) = self.chunk_uniforms.get(position).unwrap();
+
             frame
                 .draw(
                     vertices,
