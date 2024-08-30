@@ -106,6 +106,10 @@ impl Chunk {
     pub fn transform(&self) -> Transform {
         self.transform
     }
+
+    pub fn is_empty(&self) -> bool {
+        self.voxels.iter().all(|voxel| voxel.is_air())
+    }
 }
 
 pub struct ChunkMesher {}

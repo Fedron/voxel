@@ -31,6 +31,10 @@ impl World {
         let mut chunk_uniforms = HashMap::new();
 
         for (&position, chunk) in world.iter() {
+            if chunk.is_empty() {
+                continue;
+            }
+
             let mut neighbours = HashMap::new();
 
             for axis in [Axis::X, Axis::Y, Axis::Z] {
