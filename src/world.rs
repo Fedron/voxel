@@ -33,26 +33,22 @@ impl World {
 
         for (&position, chunk) in world.iter() {
             let mut neighbours = HashMap::new();
-            for i in 0..6 {
-                let neighbour_position = position.saturating_add_signed(
-                    match i {
-                        0 => Axis::Z.get_normal(Direction::Negative),
-                        1 => Axis::Z.get_normal(Direction::Positive),
-                        2 => Axis::Y.get_normal(Direction::Positive),
-                        3 => Axis::Y.get_normal(Direction::Negative),
-                        4 => Axis::X.get_normal(Direction::Negative),
-                        5 => Axis::X.get_normal(Direction::Positive),
-                        _ => unreachable!(),
+
+            for axis in [Axis::X, Axis::Y, Axis::Z] {
+                for direction in [Direction::Positive, Direction::Negative] {
+                    let neighbour_position =
+                        position.as_ivec3() + axis.get_normal(direction).as_ivec3();
+                    let neighbour_position: Result<glam::UVec3, _> = neighbour_position.try_into();
+                    if let Ok(neighbour_position) = neighbour_position {
+                        if let Some(neighbour) = world.get(&neighbour_position) {
+                            neighbours.insert(neighbour_position, neighbour);
+                        }
                     }
-                    .as_ivec3(),
-                );
-                if let Some(neighbour) = world.get(&neighbour_position) {
-                    neighbours.insert(neighbour_position, neighbour);
                 }
             }
 
-            let mesh = ChunkMesher::mesh(chunk, neighbours);
-            let greedy_mesh = ChunkMesher::greedy_mesh(chunk);
+            let mesh = ChunkMesher::mesh(chunk, neighbours.clone());
+            let greedy_mesh = ChunkMesher::greedy_mesh(chunk, &neighbours);
 
             let mut transform = chunk.transform();
             transform.position.x += CHUNK_SIZE.x as f32 * 6.0;
