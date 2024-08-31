@@ -166,6 +166,14 @@ impl WorldGeneratorUi {
                     .text("Sea Level"),
                 );
 
+                ui.add(
+                    egui::Slider::new(
+                        &mut self.world_generator_options.terrain_smoothness,
+                        0.0..=200.0,
+                    )
+                    .text("Terrain Smoothness"),
+                );
+
                 ui.separator();
 
                 if ui

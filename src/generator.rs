@@ -12,6 +12,7 @@ pub struct WorldGeneratorOptions {
     pub chunk_size: glam::UVec3,
     pub world_size: glam::UVec3,
     pub max_terrain_height: u32,
+    pub terrain_smoothness: f64,
     pub dirt_layer_thickness: u32,
     pub sea_level: u32,
 }
@@ -56,8 +57,8 @@ impl WorldGenerator {
             for z in 0..self.options.chunk_size.z {
                 let terrain_height = perlin_2d(
                     (
-                        (world_position.x + x) as f64 / 128.0,
-                        (world_position.z + z) as f64 / 128.0,
+                        (world_position.x + x) as f64 / self.options.terrain_smoothness,
+                        (world_position.z + z) as f64 / self.options.terrain_smoothness,
                     )
                         .into(),
                     &self.permutation_table,

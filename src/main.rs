@@ -187,10 +187,11 @@ impl VoxelApp {
         let world_generator_options = WorldGeneratorOptions::builder()
             .seed(1337)
             .chunk_size(CHUNK_SIZE)
-            .world_size(glam::UVec3::splat(5))
-            .max_terrain_height(CHUNK_SIZE.y * 3)
+            .world_size(glam::uvec3(10, 5, 10))
+            .max_terrain_height((CHUNK_SIZE.y * 4) - 8)
             .dirt_layer_thickness(5)
             .sea_level(CHUNK_SIZE.y)
+            .terrain_smoothness(64.0)
             .build();
         let world_generator = WorldGenerator::new(world_generator_options.clone());
 
