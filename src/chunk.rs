@@ -30,6 +30,7 @@ pub enum Voxel {
     Dirt,
     Water,
     Sand,
+    Color([u8; 4]),
 }
 
 impl Into<VoxelColor> for Voxel {
@@ -41,6 +42,12 @@ impl Into<VoxelColor> for Voxel {
             Voxel::Dirt => [0.63, 0.45, 0.29, 1.0],
             Voxel::Water => [0.0, 0.62, 1.0, 0.8],
             Voxel::Sand => [0.93, 0.89, 0.55, 1.0],
+            Voxel::Color(color) => [
+                color[0] as f32 / 255.0,
+                color[1] as f32 / 255.0,
+                color[2] as f32 / 255.0,
+                color[3] as f32 / 255.0,
+            ],
         }
     }
 }

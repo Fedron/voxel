@@ -1,7 +1,6 @@
 use std::collections::HashMap;
 
-use glam::FloatExt;
-use noise::{core::perlin::perlin_2d, permutationtable::PermutationTable};
+use noise::{Fbm, MultiFractal, NoiseFn, Perlin};
 
 use crate::chunk::{Chunk, Voxel};
 
@@ -11,24 +10,26 @@ pub struct WorldGeneratorOptions {
     pub seed: u32,
     pub chunk_size: glam::UVec3,
     pub world_size: glam::UVec3,
-    pub max_terrain_height: u32,
-    pub terrain_smoothness: f64,
-    pub dirt_layer_thickness: u32,
-    pub sea_level: u32,
+    pub continent_frequency: f64,
+    pub continent_lacunarity: f64,
 }
 
 pub struct WorldGenerator {
     options: WorldGeneratorOptions,
-    permutation_table: PermutationTable,
+    generator: Fbm<Perlin>,
 }
 
 impl WorldGenerator {
     pub fn new(options: WorldGeneratorOptions) -> Self {
-        let permutation_table = PermutationTable::new(options.seed);
+        let continent_generator = Fbm::<Perlin>::new(options.seed)
+            .set_frequency(options.continent_frequency)
+            .set_persistence(0.5)
+            .set_lacunarity(options.continent_lacunarity)
+            .set_octaves(4);
 
         Self {
             options,
-            permutation_table,
+            generator: continent_generator,
         }
     }
 
@@ -51,51 +52,24 @@ impl WorldGenerator {
 
     pub fn generate_chunk(&self, grid_position: glam::UVec3) -> Chunk {
         let mut chunk = Chunk::new(grid_position, self.options.chunk_size);
-        let world_position = grid_position * self.options.chunk_size;
+        let world_position = (grid_position * self.options.chunk_size).as_dvec3();
 
         for x in 0..self.options.chunk_size.x {
             for z in 0..self.options.chunk_size.z {
-                let terrain_height = perlin_2d(
-                    (
-                        (world_position.x + x) as f64 / self.options.terrain_smoothness,
-                        (world_position.z + z) as f64 / self.options.terrain_smoothness,
-                    )
-                        .into(),
-                    &self.permutation_table,
-                )
-                .remap(-1.0, 1.0, 1.0, self.options.max_terrain_height as f64)
-                .floor() as u32;
+                let color = if self
+                    .generator
+                    .get([world_position.x + x as f64, world_position.z + z as f64])
+                    > 0.0
+                {
+                    255u8
+                } else {
+                    0u8
+                };
 
-                for y in 0..self.options.chunk_size.y {
-                    let voxel_world_height = world_position.y + y;
-
-                    if voxel_world_height == terrain_height {
-                        chunk.set_voxel(
-                            glam::uvec3(x, y, z),
-                            if voxel_world_height <= self.options.sea_level {
-                                Voxel::Sand
-                            } else {
-                                Voxel::Grass
-                            },
-                        );
-                    } else if voxel_world_height
-                        >= terrain_height.saturating_sub(self.options.dirt_layer_thickness)
-                        && voxel_world_height < terrain_height
-                    {
-                        chunk.set_voxel(
-                            glam::UVec3::new(x, y, z),
-                            if voxel_world_height <= self.options.sea_level {
-                                Voxel::Sand
-                            } else {
-                                Voxel::Dirt
-                            },
-                        );
-                    } else if voxel_world_height < terrain_height {
-                        chunk.set_voxel(glam::UVec3::new(x, y, z), Voxel::Stone);
-                    } else if voxel_world_height < self.options.sea_level {
-                        chunk.set_voxel(glam::UVec3::new(x, y, z), Voxel::Water);
-                    }
-                }
+                chunk.set_voxel(
+                    glam::uvec3(x, 0, z),
+                    Voxel::Color([color, color, color, 255]),
+                );
             }
         }
 
