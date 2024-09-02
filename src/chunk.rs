@@ -59,8 +59,6 @@ impl Voxel {
     }
 }
 
-pub const CHUNK_SIZE: glam::UVec3 = glam::uvec3(16, 16, 16);
-
 pub struct Chunk {
     grid_position: glam::UVec3,
     size: glam::UVec3,
@@ -80,24 +78,21 @@ impl Chunk {
                 rotation: glam::Quat::IDENTITY,
                 scale: glam::Vec3::ONE,
             },
-            voxels: vec![
-                Voxel::Air;
-                CHUNK_SIZE.x as usize * CHUNK_SIZE.y as usize * CHUNK_SIZE.z as usize
-            ],
+            voxels: vec![Voxel::Air; size.x as usize * size.y as usize * size.z as usize],
         }
     }
 
     pub fn get_voxel(&self, position: glam::UVec3) -> Option<&Voxel> {
-        if position.x >= CHUNK_SIZE.x || position.y >= CHUNK_SIZE.y || position.z >= CHUNK_SIZE.z {
+        if position.x >= self.size.x || position.y >= self.size.y || position.z >= self.size.z {
             return None;
         }
 
-        let index = coord_to_index(position, CHUNK_SIZE);
+        let index = coord_to_index(position, self.size);
         self.voxels.get(index)
     }
 
     pub fn set_voxel(&mut self, position: glam::UVec3, voxel: Voxel) {
-        let index = coord_to_index(position, CHUNK_SIZE);
+        let index = coord_to_index(position, self.size);
         if self.voxels.get(index).is_some() {
             self.voxels[index] = voxel;
         }

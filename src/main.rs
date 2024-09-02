@@ -4,7 +4,7 @@ use std::rc::Rc;
 
 use app::{App, AppBehaviour, Window};
 use camera::{Camera, CameraController, Projection};
-use chunk::{VoxelUniforms, CHUNK_SIZE};
+use chunk::VoxelUniforms;
 use generator::{WorldGenerator, WorldGeneratorOptions};
 use glium::Surface;
 use sky_dome::SkyDome;
@@ -162,11 +162,7 @@ impl VoxelApp {
         .expect("to compile default shaders");
 
         let camera = Camera::new(
-            glam::vec3(
-                CHUNK_SIZE.x as f32 * -5.0,
-                CHUNK_SIZE.y as f32 * 5.0,
-                CHUNK_SIZE.z as f32 * 2.5,
-            ),
+            glam::vec3(16.0 * -5.0, 16.0 * 5.0, 16.0 * 2.5),
             0.0,
             -30.0f32.to_radians(),
         );
@@ -186,11 +182,11 @@ impl VoxelApp {
 
         let world_generator_options = WorldGeneratorOptions::builder()
             .seed(1337)
-            .chunk_size(CHUNK_SIZE)
+            .chunk_size(glam::UVec3::splat(16))
             .world_size(glam::uvec3(10, 5, 10))
-            .max_terrain_height((CHUNK_SIZE.y * 4) - 8)
+            .max_terrain_height((16 * 4) - 8)
             .dirt_layer_thickness(5)
-            .sea_level(CHUNK_SIZE.y)
+            .sea_level(16)
             .terrain_smoothness(64.0)
             .build();
         let world_generator = WorldGenerator::new(world_generator_options.clone());
