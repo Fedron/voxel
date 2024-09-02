@@ -12,11 +12,17 @@ pub struct WorldGeneratorOptions {
     pub world_size: glam::UVec3,
     pub continent_frequency: f64,
     pub continent_lacunarity: f64,
+    pub sea_level: f64,
+}
+
+enum Continent {
+    Ocean,
+    Land,
 }
 
 pub struct WorldGenerator {
     options: WorldGeneratorOptions,
-    generator: Fbm<Perlin>,
+    continent_generator: Fbm<Perlin>,
 }
 
 impl WorldGenerator {
@@ -29,7 +35,7 @@ impl WorldGenerator {
 
         Self {
             options,
-            generator: continent_generator,
+            continent_generator,
         }
     }
 
@@ -56,14 +62,11 @@ impl WorldGenerator {
 
         for x in 0..self.options.chunk_size.x {
             for z in 0..self.options.chunk_size.z {
-                let color = if self
-                    .generator
-                    .get([world_position.x + x as f64, world_position.z + z as f64])
-                    > 0.0
+                let color = match self
+                    .get_continent(world_position + glam::dvec3(x as f64, 0.0, z as f64))
                 {
-                    255u8
-                } else {
-                    0u8
+                    Continent::Land => 0,
+                    Continent::Ocean => 255,
                 };
 
                 chunk.set_voxel(
@@ -74,5 +77,15 @@ impl WorldGenerator {
         }
 
         chunk
+    }
+}
+
+impl WorldGenerator {
+    fn get_continent(&self, position: glam::DVec3) -> Continent {
+        if self.continent_generator.get([position.x, position.z]) > self.options.sea_level {
+            Continent::Land
+        } else {
+            Continent::Ocean
+        }
     }
 }

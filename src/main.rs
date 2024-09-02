@@ -184,8 +184,9 @@ impl VoxelApp {
             .seed(1337)
             .chunk_size(glam::UVec3::splat(16))
             .world_size(glam::uvec3(10, 1, 10))
-            .continent_frequency(0.05)
+            .continent_frequency(0.01)
             .continent_lacunarity(2.2)
+            .sea_level(0.0)
             .build();
         let world_generator = WorldGenerator::new(world_generator_options.clone());
 

@@ -105,7 +105,7 @@ impl WorldGeneratorUi {
                 ui.add(
                     egui::Slider::new(
                         &mut self.world_generator_options.continent_frequency,
-                        0.0..=1.0,
+                        0.0001..=0.1,
                     )
                     .text("Continent Frequency"),
                 );
@@ -116,6 +116,11 @@ impl WorldGeneratorUi {
                         1.5..=2.5,
                     )
                     .text("Continent Lacunarity"),
+                );
+
+                ui.add(
+                    egui::Slider::new(&mut self.world_generator_options.sea_level, -1.0..=1.0)
+                        .text("Sea Level"),
                 );
 
                 ui.separator();
