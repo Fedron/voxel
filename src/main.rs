@@ -5,7 +5,10 @@ use std::rc::Rc;
 use app::{App, AppBehaviour, Window};
 use camera::{Camera, CameraController, Projection};
 use chunk::VoxelUniforms;
-use generator::{WorldGenerator, WorldGeneratorOptions};
+use generator::{
+    hills::HillOptions, mountains::MountainOptions, plains::PlainOptions, rivers::RiverOptions,
+    WorldGenerator, WorldGeneratorOptions,
+};
 use glium::Surface;
 use sky_dome::SkyDome;
 use ui::WorldGeneratorUi;
@@ -184,10 +187,30 @@ impl VoxelApp {
             seed: 1337,
             chunk_size: glam::UVec3::splat(32),
             world_size: glam::uvec3(10, 1, 10),
+
             continent_frequency: 0.01,
-            continent_lacunarity: 2.2,
-            mountain_frequency: 4.34375,
+            continent_lacunarity: 2.208984375,
+            continent_height_scale: 0.25,
             sea_level: 0.0,
+
+            shelf_level: -0.375,
+            terrain_offset: 1.0,
+
+            mountain_options: MountainOptions {
+                lacunarity: 2.142578125,
+                twist: 0.5,
+                glaciation: 1.375,
+                amount: 0.5,
+            },
+            hill_options: HillOptions {
+                lacunarity: 2.162109375,
+                twist: 1.0,
+                amount: 1.5 / 2.0,
+            },
+            plain_options: PlainOptions {
+                lacunarity: 2.314453125,
+            },
+            river_options: RiverOptions { depth: 0.0234375 },
         };
 
         let world_generator = WorldGenerator::new(world_generator_options.clone());

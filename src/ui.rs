@@ -140,14 +140,6 @@ impl WorldGeneratorUi {
                     );
 
                     ui.add(
-                        egui::Slider::new(
-                            &mut self.world_generator_options.mountain_frequency,
-                            1.0..=10.0,
-                        )
-                        .text("Mountain Frequency"),
-                    );
-
-                    ui.add(
                         egui::Slider::new(&mut self.world_generator_options.sea_level, -1.0..=1.0)
                             .text("Sea Level"),
                     );
