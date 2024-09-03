@@ -26,8 +26,11 @@ pub struct World {
 
 impl World {
     pub fn new(window: &Window, generator: &WorldGenerator) -> Self {
+        let now = std::time::Instant::now();
         let world = generator.generate_world();
+        println!("World generation took: {:?}", now.elapsed());
 
+        let now = std::time::Instant::now();
         let solid_meshes = SkipMap::new();
         let transparent_meshes = SkipMap::new();
 
@@ -109,6 +112,8 @@ impl World {
                 ),
             );
         }
+
+        println!("Meshing took: {:?}", now.elapsed());
 
         Self {
             chunk_solid_buffers,

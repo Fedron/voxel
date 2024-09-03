@@ -70,58 +70,88 @@ impl WorldGeneratorUi {
                     }
                 });
 
-                ui.label("World Size:");
-                ui.horizontal(|ui| {
-                    ui.add(
-                        egui::Slider::new(&mut self.world_generator_options.world_size.x, 0..=20)
+                ui.collapsing("Size Settings", |ui| {
+                    ui.label("World Size:");
+                    ui.horizontal(|ui| {
+                        ui.add(
+                            egui::Slider::new(
+                                &mut self.world_generator_options.world_size.x,
+                                0..=20,
+                            )
                             .text("X"),
-                    );
-                    ui.add(
-                        egui::Slider::new(&mut self.world_generator_options.world_size.y, 0..=20)
+                        );
+                        ui.add(
+                            egui::Slider::new(
+                                &mut self.world_generator_options.world_size.y,
+                                0..=20,
+                            )
                             .text("Y"),
-                    );
-                    ui.add(
-                        egui::Slider::new(&mut self.world_generator_options.world_size.z, 0..=20)
+                        );
+                        ui.add(
+                            egui::Slider::new(
+                                &mut self.world_generator_options.world_size.z,
+                                0..=20,
+                            )
                             .text("Z"),
-                    );
+                        );
+                    });
+
+                    ui.label("Chunk Size:");
+                    ui.horizontal(|ui| {
+                        ui.add(
+                            egui::Slider::new(
+                                &mut self.world_generator_options.chunk_size.x,
+                                0..=128,
+                            )
+                            .text("X"),
+                        );
+                        ui.add(
+                            egui::Slider::new(
+                                &mut self.world_generator_options.chunk_size.y,
+                                0..=128,
+                            )
+                            .text("Y"),
+                        );
+                        ui.add(
+                            egui::Slider::new(
+                                &mut self.world_generator_options.chunk_size.z,
+                                0..=128,
+                            )
+                            .text("Z"),
+                        );
+                    });
                 });
 
-                ui.label("Chunk Size:");
-                ui.horizontal(|ui| {
+                ui.collapsing("Continent Settings", |ui| {
                     ui.add(
-                        egui::Slider::new(&mut self.world_generator_options.chunk_size.x, 0..=128)
-                            .text("X"),
+                        egui::Slider::new(
+                            &mut self.world_generator_options.continent_frequency,
+                            0.0001..=0.1,
+                        )
+                        .text("Continent Frequency"),
                     );
+
                     ui.add(
-                        egui::Slider::new(&mut self.world_generator_options.chunk_size.y, 0..=128)
-                            .text("Y"),
+                        egui::Slider::new(
+                            &mut self.world_generator_options.continent_lacunarity,
+                            1.5..=2.5,
+                        )
+                        .text("Continent Lacunarity"),
                     );
+
                     ui.add(
-                        egui::Slider::new(&mut self.world_generator_options.chunk_size.z, 0..=128)
-                            .text("Z"),
+                        egui::Slider::new(
+                            &mut self.world_generator_options.mountain_frequency,
+                            1.0..=10.0,
+                        )
+                        .text("Mountain Frequency"),
+                    );
+
+                    ui.add(
+                        egui::Slider::new(&mut self.world_generator_options.sea_level, -1.0..=1.0)
+                            .text("Sea Level"),
                     );
                 });
-
-                ui.add(
-                    egui::Slider::new(
-                        &mut self.world_generator_options.continent_frequency,
-                        0.0001..=0.1,
-                    )
-                    .text("Continent Frequency"),
-                );
-
-                ui.add(
-                    egui::Slider::new(
-                        &mut self.world_generator_options.continent_lacunarity,
-                        1.5..=2.5,
-                    )
-                    .text("Continent Lacunarity"),
-                );
-
-                ui.add(
-                    egui::Slider::new(&mut self.world_generator_options.sea_level, -1.0..=1.0)
-                        .text("Sea Level"),
-                );
 
                 ui.separator();
 

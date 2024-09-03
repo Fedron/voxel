@@ -180,14 +180,16 @@ impl VoxelApp {
 
         let sky_dome = SkyDome::new(&window.display, 20, 20, 500.0);
 
-        let world_generator_options = WorldGeneratorOptions::builder()
-            .seed(1337)
-            .chunk_size(glam::UVec3::splat(16))
-            .world_size(glam::uvec3(10, 1, 10))
-            .continent_frequency(0.01)
-            .continent_lacunarity(2.2)
-            .sea_level(0.0)
-            .build();
+        let world_generator_options = WorldGeneratorOptions {
+            seed: 1337,
+            chunk_size: glam::UVec3::splat(32),
+            world_size: glam::uvec3(10, 1, 10),
+            continent_frequency: 0.01,
+            continent_lacunarity: 2.2,
+            mountain_frequency: 4.34375,
+            sea_level: 0.0,
+        };
+
         let world_generator = WorldGenerator::new(world_generator_options.clone());
 
         let world = World::new(&window, &world_generator);

@@ -1,17 +1,18 @@
 use std::collections::HashMap;
 
-use noise::{Fbm, MultiFractal, NoiseFn, Perlin};
+use noise::{Cache, Clamp, Curve, Fbm, Min, MultiFractal, NoiseFn, Perlin, ScaleBias};
 
 use crate::chunk::{Chunk, Voxel};
 
-#[bon::builder]
 #[derive(Debug, Clone)]
 pub struct WorldGeneratorOptions {
     pub seed: u32,
     pub chunk_size: glam::UVec3,
     pub world_size: glam::UVec3,
+
     pub continent_frequency: f64,
     pub continent_lacunarity: f64,
+    pub mountain_frequency: f64,
     pub sea_level: f64,
 }
 
@@ -22,16 +23,43 @@ enum Continent {
 
 pub struct WorldGenerator {
     options: WorldGeneratorOptions,
-    continent_generator: Fbm<Perlin>,
+    continent_generator: Box<dyn NoiseFn<f64, 2>>,
 }
 
 impl WorldGenerator {
     pub fn new(options: WorldGeneratorOptions) -> Self {
-        let continent_generator = Fbm::<Perlin>::new(options.seed)
-            .set_frequency(options.continent_frequency)
-            .set_persistence(0.5)
-            .set_lacunarity(options.continent_lacunarity)
-            .set_octaves(4);
+        let continent_generator = {
+            let base = Fbm::<Perlin>::new(options.seed)
+                .set_frequency(options.continent_frequency)
+                .set_persistence(0.5)
+                .set_lacunarity(options.continent_lacunarity)
+                .set_octaves(4);
+
+            let curve = Curve::new(base)
+                .add_control_point(-2.0 + options.sea_level, -1.625 + options.sea_level)
+                .add_control_point(-1.0000 + options.sea_level, -1.375 + options.sea_level)
+                .add_control_point(0.0000 + options.sea_level, -0.375 + options.sea_level)
+                .add_control_point(0.0625 + options.sea_level, 0.125 + options.sea_level)
+                .add_control_point(0.1250 + options.sea_level, 0.250 + options.sea_level)
+                .add_control_point(0.2500 + options.sea_level, 1.000 + options.sea_level)
+                .add_control_point(0.5000 + options.sea_level, 0.250 + options.sea_level)
+                .add_control_point(0.7500 + options.sea_level, 0.250 + options.sea_level)
+                .add_control_point(1.0000 + options.sea_level, 0.500 + options.sea_level)
+                .add_control_point(2.0000 + options.sea_level, 0.500 + options.sea_level);
+
+            let carver = Fbm::<Perlin>::new(options.seed + 1)
+                .set_frequency(options.continent_frequency * options.mountain_frequency)
+                .set_persistence(0.5)
+                .set_lacunarity(options.continent_lacunarity)
+                .set_octaves(11);
+
+            let scaled = ScaleBias::new(carver).set_scale(0.375).set_bias(0.625);
+
+            let min = Min::new(scaled, curve);
+            let clamped = Clamp::new(min).set_bounds(-1.0, 1.0);
+
+            Box::new(Cache::new(clamped))
+        };
 
         Self {
             options,
