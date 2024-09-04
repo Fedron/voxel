@@ -73,6 +73,16 @@ impl Mesh {
         )
     }
 
+    pub fn as_buffers(
+        &self,
+        display: &glium::Display<glium::glutin::surface::WindowSurface>,
+    ) -> MeshBuffers {
+        MeshBuffers {
+            vertex_buffer: self.vertex_buffer(display).expect("to create buffer"),
+            index_buffer: self.index_buffer(display).expect("to create buffer"),
+        }
+    }
+
     pub fn add_quad<P, N, C>(&mut self, p1: P, p2: P, p3: P, p4: P, normal: N, color: C)
     where
         P: Into<[f32; 3]>,
@@ -174,4 +184,9 @@ impl Mesh {
             color,
         );
     }
+}
+
+pub struct MeshBuffers {
+    pub vertex_buffer: glium::VertexBuffer<Vertex>,
+    pub index_buffer: glium::IndexBuffer<u32>,
 }

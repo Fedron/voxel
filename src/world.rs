@@ -1,14 +1,12 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, rc::Rc};
 
-use crossbeam_skiplist::SkipMap;
 use glium::{DrawParameters, Surface};
-use rayon::prelude::*;
 
 use crate::{
     app::Window,
     chunk::{
-        mesh::{Axis, Direction, Vertex},
-        ChunkMesher, VoxelUniforms,
+        mesh::{Axis, Direction, MeshBuffers},
+        Chunk, ChunkMesher, VoxelUniforms,
     },
     generator::WorldGenerator,
 };
@@ -17,108 +15,73 @@ type ModelMatrix = [[f32; 4]; 4];
 type NormalMatrix = [[f32; 3]; 3];
 
 pub struct World {
-    chunk_solid_buffers:
-        HashMap<glam::UVec3, (glium::VertexBuffer<Vertex>, glium::IndexBuffer<u32>)>,
-    chunk_transparent_buffers:
-        HashMap<glam::UVec3, (glium::VertexBuffer<Vertex>, glium::IndexBuffer<u32>)>,
-    chunk_uniforms: HashMap<glam::UVec3, (ModelMatrix, NormalMatrix)>,
+    chunks: HashMap<glam::IVec3, Chunk>,
+
+    chunk_solid_meshes: HashMap<glam::IVec3, MeshBuffers>,
+    chunk_transparent_meshes: HashMap<glam::IVec3, MeshBuffers>,
+    chunk_uniforms: HashMap<glam::IVec3, (ModelMatrix, NormalMatrix)>,
+
+    window: Rc<Window>,
 }
 
 impl World {
-    pub fn new(window: &Window, generator: &WorldGenerator) -> Self {
-        let now = std::time::Instant::now();
-        let world = generator.generate_world();
-        println!("World generation took: {:?}", now.elapsed());
+    pub fn new(window: Rc<Window>) -> Self {
+        Self {
+            chunks: HashMap::new(),
 
-        let now = std::time::Instant::now();
-        let solid_meshes = SkipMap::new();
-        let transparent_meshes = SkipMap::new();
+            chunk_solid_meshes: HashMap::new(),
+            chunk_transparent_meshes: HashMap::new(),
+            chunk_uniforms: HashMap::new(),
 
-        world
-            .par_iter()
-            .filter(|(_, chunk)| !chunk.is_empty())
-            .for_each(|(&position, chunk)| {
+            window,
+        }
+    }
+
+    pub fn update(&mut self, camera_position: glam::Vec3, generator: &WorldGenerator) {
+        let current_chunk_pos = (camera_position / generator.options.chunk_size.as_vec3())
+            .floor()
+            .as_ivec3();
+
+        if self.chunks.get(&current_chunk_pos).is_none() {
+            let chunk = generator.generate_chunk(current_chunk_pos);
+
+            if !chunk.is_empty() {
                 let mut neighbours = HashMap::new();
 
                 for axis in [Axis::X, Axis::Y, Axis::Z] {
                     for direction in [Direction::Positive, Direction::Negative] {
                         let neighbour_position =
-                            position.as_ivec3() + axis.get_normal(direction).as_ivec3();
-                        let neighbour_position: Result<glam::UVec3, _> =
-                            neighbour_position.try_into();
-                        if let Ok(neighbour_position) = neighbour_position {
-                            if let Some(neighbour) = world.get(&neighbour_position) {
-                                neighbours.insert(neighbour_position, neighbour);
-                            }
+                            current_chunk_pos + axis.get_normal(direction).as_ivec3();
+
+                        if let Some(neighbour) = self.chunks.get(&neighbour_position) {
+                            neighbours.insert(neighbour_position, neighbour);
                         }
                     }
                 }
 
-                let (solid_mesh, transparent_mesh) = ChunkMesher::mesh(chunk, &neighbours);
+                let (solid_mesh, transparent_mesh) = ChunkMesher::mesh(&chunk, &neighbours);
 
                 if let Some(solid_mesh) = solid_mesh {
-                    solid_meshes.insert((position.x, position.y, position.z), solid_mesh);
+                    let buffers = solid_mesh.as_buffers(&self.window.display);
+                    self.chunk_solid_meshes.insert(current_chunk_pos, buffers);
                 }
 
                 if let Some(transparent_mesh) = transparent_mesh {
-                    transparent_meshes
-                        .insert((position.x, position.y, position.z), transparent_mesh);
+                    let buffers = transparent_mesh.as_buffers(&self.window.display);
+                    self.chunk_transparent_meshes
+                        .insert(current_chunk_pos, buffers);
                 }
-            });
 
-        let mut chunk_solid_buffers = HashMap::new();
-        let mut chunk_transparent_buffers = HashMap::new();
-        let mut chunk_uniforms = HashMap::new();
+                self.chunk_uniforms.insert(
+                    current_chunk_pos,
+                    (
+                        chunk.transform().model_matrix().to_cols_array_2d(),
+                        chunk.transform().normal_matrix().to_cols_array_2d(),
+                    ),
+                );
 
-        for mesh in solid_meshes.iter() {
-            let position = {
-                let position = mesh.key();
-                glam::UVec3::new(position.0, position.1, position.2)
-            };
-
-            let mesh = mesh.value();
-
-            chunk_solid_buffers.insert(
-                position,
-                (
-                    mesh.vertex_buffer(&window.display).unwrap(),
-                    mesh.index_buffer(&window.display).unwrap(),
-                ),
-            );
-
-            let chunk = world.get(&position).unwrap();
-            chunk_uniforms.insert(
-                position,
-                (
-                    chunk.transform().model_matrix().to_cols_array_2d(),
-                    chunk.transform().normal_matrix().to_cols_array_2d(),
-                ),
-            );
-        }
-
-        for mesh in transparent_meshes.iter() {
-            let position = {
-                let position = mesh.key();
-                glam::UVec3::new(position.0, position.1, position.2)
-            };
-
-            let mesh = mesh.value();
-
-            chunk_transparent_buffers.insert(
-                position,
-                (
-                    mesh.vertex_buffer(&window.display).unwrap(),
-                    mesh.index_buffer(&window.display).unwrap(),
-                ),
-            );
-        }
-
-        println!("Meshing took: {:?}", now.elapsed());
-
-        Self {
-            chunk_solid_buffers,
-            chunk_transparent_buffers,
-            chunk_uniforms,
+                self.chunks.insert(current_chunk_pos, chunk);
+            }
         }
     }
 
@@ -129,13 +92,13 @@ impl World {
         uniforms: VoxelUniforms,
         draw_wireframe: bool,
     ) {
-        for (position, (vertices, indices)) in self.chunk_solid_buffers.iter() {
+        for (position, mesh) in self.chunk_solid_meshes.iter() {
             let (model, normal) = self.chunk_uniforms.get(position).unwrap();
 
             frame
                 .draw(
-                    vertices,
-                    indices,
+                    &mesh.vertex_buffer,
+                    &mesh.index_buffer,
                     &shader,
                     &uniform! {
                         view_proj: uniforms.view_projection,
@@ -164,13 +127,13 @@ impl World {
                 .expect("to draw vertices");
         }
 
-        for (position, (vertices, indices)) in self.chunk_transparent_buffers.iter() {
+        for (position, mesh) in self.chunk_transparent_meshes.iter() {
             let (model, normal) = self.chunk_uniforms.get(position).unwrap();
 
             frame
                 .draw(
-                    vertices,
-                    indices,
+                    &mesh.vertex_buffer,
+                    &mesh.index_buffer,
                     &shader,
                     &uniform! {
                         view_proj: uniforms.view_projection,

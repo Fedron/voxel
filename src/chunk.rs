@@ -67,15 +67,15 @@ impl Voxel {
 }
 
 pub struct Chunk {
-    grid_position: glam::UVec3,
+    grid_position: glam::IVec3,
     size: glam::UVec3,
     transform: Transform,
     voxels: Vec<Voxel>,
 }
 
 impl Chunk {
-    pub fn new(grid_position: glam::UVec3, size: glam::UVec3) -> Self {
-        let transform_position = grid_position * size;
+    pub fn new(grid_position: glam::IVec3, size: glam::UVec3) -> Self {
+        let transform_position = grid_position * size.as_ivec3();
 
         Self {
             grid_position,
@@ -87,6 +87,10 @@ impl Chunk {
             },
             voxels: vec![Voxel::Air; size.x as usize * size.y as usize * size.z as usize],
         }
+    }
+
+    pub fn transform(&self) -> Transform {
+        self.transform
     }
 
     pub fn get_voxel(&self, position: glam::UVec3) -> Option<&Voxel> {
@@ -105,10 +109,6 @@ impl Chunk {
         }
     }
 
-    pub fn transform(&self) -> Transform {
-        self.transform
-    }
-
     pub fn is_empty(&self) -> bool {
         self.voxels.iter().all(|voxel| voxel.is_air())
     }
@@ -122,7 +122,7 @@ impl ChunkMesher {
     /// Returns a tuple of two optional meshes. The first mesh is the solid mesh and the second mesh is the transparent mesh.
     pub fn mesh(
         chunk: &Chunk,
-        chunk_neighbours: &HashMap<glam::UVec3, &Chunk>,
+        chunk_neighbours: &HashMap<glam::IVec3, &Chunk>,
     ) -> (Option<Mesh>, Option<Mesh>) {
         let mesh = {
             let mesh = Self::greedy_mesh(
@@ -157,7 +157,7 @@ impl ChunkMesher {
 
     fn greedy_mesh<V, N>(
         chunk: &Chunk,
-        chunk_neighbours: &HashMap<glam::UVec3, &Chunk>,
+        chunk_neighbours: &HashMap<glam::IVec3, &Chunk>,
         voxel_to_mesh: V,
         neighbour_condition: N,
     ) -> Mesh
@@ -307,43 +307,39 @@ impl ChunkMesher {
 
     fn has_neigbour(
         chunk: &Chunk,
-        chunk_neighbours: &HashMap<glam::UVec3, &Chunk>,
+        chunk_neighbours: &HashMap<glam::IVec3, &Chunk>,
         voxel_position: glam::UVec3,
         axis: Axis,
         direction: Direction,
         condition: impl Fn(Voxel) -> bool,
     ) -> bool {
-        let neighbour_chunk_position =
-            chunk.grid_position.as_ivec3() + axis.get_normal(direction).as_ivec3();
-        let neighbour_chunk_position: Result<glam::UVec3, _> = neighbour_chunk_position.try_into();
+        let neighbour_chunk_position = chunk.grid_position + axis.get_normal(direction).as_ivec3();
 
-        if let Ok(neighbour_chunk_position) = neighbour_chunk_position {
-            if let Some(neighbour_chunk) = chunk_neighbours.get(&neighbour_chunk_position) {
-                let neighbour_position = match (axis, direction) {
-                    (Axis::X, Direction::Positive) => {
-                        glam::uvec3(0, voxel_position.y, voxel_position.z)
-                    }
-                    (Axis::X, Direction::Negative) => {
-                        glam::uvec3(chunk.size.x - 1, voxel_position.y, voxel_position.z)
-                    }
-                    (Axis::Y, Direction::Positive) => {
-                        glam::uvec3(voxel_position.x, 0, voxel_position.z)
-                    }
-                    (Axis::Y, Direction::Negative) => {
-                        glam::uvec3(voxel_position.x, chunk.size.y - 1, voxel_position.z)
-                    }
-                    (Axis::Z, Direction::Positive) => {
-                        glam::uvec3(voxel_position.x, voxel_position.y, 0)
-                    }
-                    (Axis::Z, Direction::Negative) => {
-                        glam::uvec3(voxel_position.x, voxel_position.y, chunk.size.z - 1)
-                    }
-                };
+        if let Some(neighbour_chunk) = chunk_neighbours.get(&neighbour_chunk_position) {
+            let neighbour_position = match (axis, direction) {
+                (Axis::X, Direction::Positive) => {
+                    glam::uvec3(0, voxel_position.y, voxel_position.z)
+                }
+                (Axis::X, Direction::Negative) => {
+                    glam::uvec3(chunk.size.x - 1, voxel_position.y, voxel_position.z)
+                }
+                (Axis::Y, Direction::Positive) => {
+                    glam::uvec3(voxel_position.x, 0, voxel_position.z)
+                }
+                (Axis::Y, Direction::Negative) => {
+                    glam::uvec3(voxel_position.x, chunk.size.y - 1, voxel_position.z)
+                }
+                (Axis::Z, Direction::Positive) => {
+                    glam::uvec3(voxel_position.x, voxel_position.y, 0)
+                }
+                (Axis::Z, Direction::Negative) => {
+                    glam::uvec3(voxel_position.x, voxel_position.y, chunk.size.z - 1)
+                }
+            };
 
-                if let Some(neighbour_voxel) = neighbour_chunk.get_voxel(neighbour_position) {
-                    if !condition(*neighbour_voxel) {
-                        return true;
-                    }
+            if let Some(neighbour_voxel) = neighbour_chunk.get_voxel(neighbour_position) {
+                if !condition(*neighbour_voxel) {
+                    return true;
                 }
             }
         }

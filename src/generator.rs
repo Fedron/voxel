@@ -1,5 +1,3 @@
-use std::collections::HashMap;
-
 use hills::HillOptions;
 use mountains::MountainOptions;
 use noise::{
@@ -20,7 +18,6 @@ pub mod rivers;
 pub struct WorldGeneratorOptions {
     pub seed: u32,
     pub chunk_size: glam::UVec3,
-    pub world_size: glam::UVec3,
 
     pub continent_frequency: f64,
     pub continent_lacunarity: f64,
@@ -37,12 +34,13 @@ pub struct WorldGeneratorOptions {
 }
 
 pub struct WorldGenerator {
-    options: WorldGeneratorOptions,
+    pub options: WorldGeneratorOptions,
     generator: Box<dyn NoiseFn<f64, 2>>,
 }
 
 impl WorldGenerator {
     pub fn new(options: WorldGeneratorOptions) -> Self {
+        let now = std::time::Instant::now();
         let continent_with_plains = || {
             let add = Add::new(
                 Self::continent_elevation(&options),
@@ -119,6 +117,7 @@ impl WorldGenerator {
 
             Cache::new(select)
         };
+        println!("Noise function init took {:?}", now.elapsed());
 
         Self {
             options,
@@ -126,26 +125,9 @@ impl WorldGenerator {
         }
     }
 
-    pub fn generate_world(&self) -> HashMap<glam::UVec3, Chunk> {
-        let mut world = HashMap::new();
-
-        for x in 0..self.options.world_size.x {
-            for y in 0..self.options.world_size.y {
-                for z in 0..self.options.world_size.z {
-                    world.insert(
-                        glam::uvec3(x, y, z),
-                        self.generate_chunk(glam::uvec3(x, y, z)),
-                    );
-                }
-            }
-        }
-
-        world
-    }
-
-    pub fn generate_chunk(&self, grid_position: glam::UVec3) -> Chunk {
+    pub fn generate_chunk(&self, grid_position: glam::IVec3) -> Chunk {
         let mut chunk = Chunk::new(grid_position, self.options.chunk_size);
-        let world_position = (grid_position * self.options.chunk_size).as_dvec3();
+        let world_position = (grid_position * self.options.chunk_size.as_ivec3()).as_dvec3();
 
         for x in 0..self.options.chunk_size.x {
             for z in 0..self.options.chunk_size.z {

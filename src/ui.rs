@@ -71,31 +71,6 @@ impl WorldGeneratorUi {
                 });
 
                 ui.collapsing("Size Settings", |ui| {
-                    ui.label("World Size:");
-                    ui.horizontal(|ui| {
-                        ui.add(
-                            egui::Slider::new(
-                                &mut self.world_generator_options.world_size.x,
-                                0..=20,
-                            )
-                            .text("X"),
-                        );
-                        ui.add(
-                            egui::Slider::new(
-                                &mut self.world_generator_options.world_size.y,
-                                0..=20,
-                            )
-                            .text("Y"),
-                        );
-                        ui.add(
-                            egui::Slider::new(
-                                &mut self.world_generator_options.world_size.z,
-                                0..=20,
-                            )
-                            .text("Z"),
-                        );
-                    });
-
                     ui.label("Chunk Size:");
                     ui.horizontal(|ui| {
                         ui.add(

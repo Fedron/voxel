@@ -38,7 +38,9 @@ struct VoxelApp {
 
     sky_dome: SkyDome,
     voxel_shader: glium::Program,
+
     world: World,
+    world_generator: WorldGenerator,
     world_generator_ui: WorldGeneratorUi,
 
     render_wireframe: bool,
@@ -110,13 +112,16 @@ impl AppBehaviour for VoxelApp {
 
         self.sky_dome.position = self.camera.position - glam::vec3(0.0, 200.0, 0.0);
 
-        if self.world_generator_ui.should_generate_world {
-            self.world_generator_ui.should_generate_world = false;
+        self.world
+            .update(self.camera.position, &self.world_generator);
 
-            let world_generator =
-                WorldGenerator::new(self.world_generator_ui.world_generator_options.clone());
-            self.world = World::new(&self.window, &world_generator);
-        }
+        // if self.world_generator_ui.should_generate_world {
+        //     self.world_generator_ui.should_generate_world = false;
+
+        //     let world_generator =
+        //         WorldGenerator::new(self.world_generator_ui.world_generator_options.clone());
+        //     self.world = World::new(&self.window, &world_generator);
+        // }
     }
 
     fn render(&mut self, frame: &mut glium::Frame) {
@@ -186,7 +191,6 @@ impl VoxelApp {
         let world_generator_options = WorldGeneratorOptions {
             seed: 1337,
             chunk_size: glam::UVec3::splat(32),
-            world_size: glam::uvec3(10, 1, 10),
 
             continent_frequency: 0.01,
             continent_lacunarity: 2.208984375,
@@ -213,10 +217,8 @@ impl VoxelApp {
             river_options: RiverOptions { depth: 0.0234375 },
         };
 
+        let world = World::new(window.clone());
         let world_generator = WorldGenerator::new(world_generator_options.clone());
-
-        let world = World::new(&window, &world_generator);
-
         let world_generator_ui =
             WorldGeneratorUi::new(world_generator_options, window.clone(), event_loop);
 
@@ -230,7 +232,9 @@ impl VoxelApp {
 
             sky_dome,
             voxel_shader,
+
             world,
+            world_generator,
             world_generator_ui,
 
             render_wireframe: false,
