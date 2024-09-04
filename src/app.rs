@@ -10,8 +10,11 @@ use winit::{
     platform::pump_events::EventLoopExtPumpEvents,
 };
 
+/// Wrapper for a winit window and a glium display.
 pub struct Window {
+    /// Underlying winit window.
     pub winit: winit::window::Window,
+    /// Underlying glium display.
     pub display: Display<WindowSurface>,
 }
 
@@ -20,7 +23,11 @@ pub trait AppBehaviour {
     ///
     /// Returns `true` if the app should continue running, `false` otherwise.
     fn process_events(&mut self, event: Event<()>) -> bool;
+
+    /// Updates the app state.
     fn update(&mut self, delta_time: Duration);
+
+    /// Renders the app.
     fn render(&mut self, frame: &mut glium::Frame);
 }
 
@@ -34,6 +41,7 @@ pub struct App {
 }
 
 impl App {
+    /// Creates a new winit window, and initializes OpenGL.
     pub fn new(title: &str, width: u32, height: u32) -> Self {
         let event_loop = EventLoop::new().expect("to create event loop");
         let (window, display) = glium::backend::glutin::SimpleWindowBuilder::new()
@@ -54,6 +62,7 @@ impl App {
         }
     }
 
+    /// Run the given app.
     pub fn run(&mut self, mut app: impl AppBehaviour) {
         while !self.should_close {
             let current_time = Instant::now();

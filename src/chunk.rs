@@ -12,14 +12,6 @@ pub struct VoxelUniforms {
     pub light_position: [f32; 3],
 }
 
-#[derive(Copy, Clone)]
-pub struct VoxelVertex {
-    pub position: [f32; 3],
-    pub normal: [f32; 3],
-    pub color: VoxelColor,
-}
-implement_vertex!(VoxelVertex, position, normal, color);
-
 pub type VoxelColor = [f32; 4];
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -66,14 +58,20 @@ impl Voxel {
     }
 }
 
+/// Represents a chunk of the world.
 pub struct Chunk {
+    /// The grid position of the chunk.
     grid_position: glam::IVec3,
+    /// The size of the chunk.
     size: glam::UVec3,
+    /// The transform of the chunk.
     transform: Transform,
+    /// The voxels of the chunk.
     voxels: Vec<Voxel>,
 }
 
 impl Chunk {
+    /// Creates a new empty chunk with the given grid position and size.
     pub fn new(grid_position: glam::IVec3, size: glam::UVec3) -> Self {
         let transform_position = grid_position * size.as_ivec3();
 
@@ -89,10 +87,12 @@ impl Chunk {
         }
     }
 
+    /// Returns the transformation of the chunk.
     pub fn transform(&self) -> Transform {
         self.transform
     }
 
+    /// Returns a reference to the voxel at the given position.
     pub fn get_voxel(&self, position: glam::UVec3) -> Option<&Voxel> {
         if position.x >= self.size.x || position.y >= self.size.y || position.z >= self.size.z {
             return None;
@@ -102,6 +102,7 @@ impl Chunk {
         self.voxels.get(index)
     }
 
+    /// Sets the voxel at the given position.
     pub fn set_voxel(&mut self, position: glam::UVec3, voxel: Voxel) {
         let index = coord_to_index(position, self.size);
         if self.voxels.get(index).is_some() {
@@ -109,24 +110,22 @@ impl Chunk {
         }
     }
 
+    /// Returns whether the chunk entirely consists of air voxels.
     pub fn is_empty(&self) -> bool {
         self.voxels.iter().all(|voxel| voxel.is_air())
     }
 }
 
-pub struct ChunkMesher {}
-
-impl ChunkMesher {
-    /// Generates a mesh for the chunk.
+impl Chunk {
+    /// Creates a new mesh for the chunk.
     ///
     /// Returns a tuple of two optional meshes. The first mesh is the solid mesh and the second mesh is the transparent mesh.
     pub fn mesh(
-        chunk: &Chunk,
+        &self,
         chunk_neighbours: &HashMap<glam::IVec3, &Chunk>,
     ) -> (Option<Mesh>, Option<Mesh>) {
         let mesh = {
-            let mesh = Self::greedy_mesh(
-                chunk,
+            let mesh = self.greedy_mesh(
                 chunk_neighbours,
                 |voxel| voxel.is_solid(),
                 |voxel| !voxel.is_solid(),
@@ -139,8 +138,7 @@ impl ChunkMesher {
         };
 
         let transparent_mesh = {
-            let mesh = Self::greedy_mesh(
-                chunk,
+            let mesh = self.greedy_mesh(
                 chunk_neighbours,
                 |voxel| voxel.is_liquid(),
                 |voxel| voxel.is_air(),
@@ -156,7 +154,7 @@ impl ChunkMesher {
     }
 
     fn greedy_mesh<V, N>(
-        chunk: &Chunk,
+        &self,
         chunk_neighbours: &HashMap<glam::IVec3, &Chunk>,
         voxel_to_mesh: V,
         neighbour_condition: N,
@@ -172,16 +170,16 @@ impl ChunkMesher {
                 let mut visited = HashSet::new();
 
                 let plane_dimensions = match axis {
-                    Axis::X => glam::uvec2(chunk.size.y, chunk.size.z),
-                    Axis::Y => glam::uvec2(chunk.size.x, chunk.size.z),
-                    Axis::Z => glam::uvec2(chunk.size.x, chunk.size.y),
+                    Axis::X => glam::uvec2(self.size.y, self.size.z),
+                    Axis::Y => glam::uvec2(self.size.x, self.size.z),
+                    Axis::Z => glam::uvec2(self.size.x, self.size.y),
                 };
 
-                for x in 0..chunk.size.x {
-                    for y in 0..chunk.size.y {
-                        for z in 0..chunk.size.z {
+                for x in 0..self.size.x {
+                    for y in 0..self.size.y {
+                        for z in 0..self.size.z {
                             let position = glam::uvec3(x, y, z);
-                            let voxel = chunk.get_voxel(position);
+                            let voxel = self.get_voxel(position);
                             if visited.contains(&position) || voxel.is_none() {
                                 continue;
                             } else if let Some(voxel) = voxel {
@@ -196,8 +194,7 @@ impl ChunkMesher {
                                 || neighbour_position.y < 0
                                 || neighbour_position.z < 0
                             {
-                                if Self::has_neigbour(
-                                    chunk,
+                                if self.voxel_has_neigbour(
                                     chunk_neighbours,
                                     position,
                                     axis,
@@ -207,8 +204,7 @@ impl ChunkMesher {
                                     continue;
                                 }
                             } else {
-                                let neighbour_voxel =
-                                    chunk.get_voxel(neighbour_position.as_uvec3());
+                                let neighbour_voxel = self.get_voxel(neighbour_position.as_uvec3());
 
                                 match neighbour_voxel {
                                     Some(neighbour) => {
@@ -217,8 +213,7 @@ impl ChunkMesher {
                                         }
                                     }
                                     None => {
-                                        if Self::has_neigbour(
-                                            chunk,
+                                        if self.voxel_has_neigbour(
                                             chunk_neighbours,
                                             position,
                                             axis,
@@ -244,7 +239,7 @@ impl ChunkMesher {
                                     Axis::Z => glam::uvec3(x + size.x, y, z),
                                 };
 
-                                let next_voxel = chunk.get_voxel(next_position);
+                                let next_voxel = self.get_voxel(next_position);
                                 if visited.contains(&next_position)
                                     || next_voxel.is_none()
                                     || next_voxel != voxel
@@ -263,7 +258,7 @@ impl ChunkMesher {
                                         Axis::Z => glam::uvec3(x + w, y + size.y, z),
                                     };
 
-                                    let next_voxel = chunk.get_voxel(next_position);
+                                    let next_voxel = self.get_voxel(next_position);
                                     if visited.contains(&next_position)
                                         || next_voxel.is_none()
                                         || next_voxel != voxel
@@ -305,15 +300,15 @@ impl ChunkMesher {
         mesh
     }
 
-    fn has_neigbour(
-        chunk: &Chunk,
+    fn voxel_has_neigbour(
+        &self,
         chunk_neighbours: &HashMap<glam::IVec3, &Chunk>,
         voxel_position: glam::UVec3,
         axis: Axis,
         direction: Direction,
         condition: impl Fn(Voxel) -> bool,
     ) -> bool {
-        let neighbour_chunk_position = chunk.grid_position + axis.get_normal(direction).as_ivec3();
+        let neighbour_chunk_position = self.grid_position + axis.get_normal(direction).as_ivec3();
 
         if let Some(neighbour_chunk) = chunk_neighbours.get(&neighbour_chunk_position) {
             let neighbour_position = match (axis, direction) {
@@ -321,19 +316,19 @@ impl ChunkMesher {
                     glam::uvec3(0, voxel_position.y, voxel_position.z)
                 }
                 (Axis::X, Direction::Negative) => {
-                    glam::uvec3(chunk.size.x - 1, voxel_position.y, voxel_position.z)
+                    glam::uvec3(self.size.x - 1, voxel_position.y, voxel_position.z)
                 }
                 (Axis::Y, Direction::Positive) => {
                     glam::uvec3(voxel_position.x, 0, voxel_position.z)
                 }
                 (Axis::Y, Direction::Negative) => {
-                    glam::uvec3(voxel_position.x, chunk.size.y - 1, voxel_position.z)
+                    glam::uvec3(voxel_position.x, self.size.y - 1, voxel_position.z)
                 }
                 (Axis::Z, Direction::Positive) => {
                     glam::uvec3(voxel_position.x, voxel_position.y, 0)
                 }
                 (Axis::Z, Direction::Negative) => {
-                    glam::uvec3(voxel_position.x, voxel_position.y, chunk.size.z - 1)
+                    glam::uvec3(voxel_position.x, voxel_position.y, self.size.z - 1)
                 }
             };
 

@@ -3,17 +3,42 @@ use noise::{
     RidgedMulti, ScaleBias, Seedable, Turbulence,
 };
 
-use super::WorldGeneratorOptions;
+use super::WorldGenerationOptions;
 
+/// Options for generating hills.
 #[derive(Debug, Clone, Copy)]
 pub struct HillOptions {
+    /// Lacunarity of the hills generation.
     pub lacunarity: f64,
+    /// Twist of the hills generation.
     pub twist: f64,
+    /// Amount of hills to generate.
     pub amount: f64,
 }
 
 impl HillOptions {
-    pub fn as_noise(&self, world: &WorldGeneratorOptions) -> impl NoiseFn<f64, 2> {
+    /// Creates a noise module that defines the shape of the hills.
+    pub fn as_noise_module(&self, world: &WorldGenerationOptions) -> impl NoiseFn<f64, 2> {
+        let scaled = ScaleBias::new(self.base_noise_module(world))
+            .set_scale(0.0625)
+            .set_bias(0.0625);
+
+        let fbm = Fbm::<Perlin>::new(world.seed + 100)
+            .set_frequency(13.5)
+            .set_persistence(0.5)
+            .set_lacunarity(self.lacunarity)
+            .set_octaves(6);
+
+        let ex = Exponent::new(fbm).set_exponent(1.25);
+
+        let scaled1 = ScaleBias::new(ex).set_scale(0.5).set_bias(1.5);
+
+        let mult = Multiply::new(scaled, scaled1);
+
+        Cache::new(mult)
+    }
+
+    fn base_noise_module(&self, world: &WorldGenerationOptions) -> impl NoiseFn<f64, 2> {
         let base = Billow::<Perlin>::new(world.seed + 60)
             .set_frequency(1663.0)
             .set_persistence(0.5)
@@ -50,25 +75,5 @@ impl HillOptions {
             .set_roughness(6);
 
         Cache::new(tu)
-    }
-
-    pub fn as_scaled_noise(&self, world: &WorldGeneratorOptions) -> impl NoiseFn<f64, 2> {
-        let scaled = ScaleBias::new(self.as_noise(world))
-            .set_scale(0.0625)
-            .set_bias(0.0625);
-
-        let fbm = Fbm::<Perlin>::new(world.seed + 100)
-            .set_frequency(13.5)
-            .set_persistence(0.5)
-            .set_lacunarity(self.lacunarity)
-            .set_octaves(6);
-
-        let ex = Exponent::new(fbm).set_exponent(1.25);
-
-        let scaled1 = ScaleBias::new(ex).set_scale(0.5).set_bias(1.5);
-
-        let mult = Multiply::new(scaled, scaled1);
-
-        Cache::new(mult)
     }
 }

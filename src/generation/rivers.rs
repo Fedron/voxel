@@ -1,14 +1,17 @@
 use noise::{Cache, Curve, Min, MultiFractal, NoiseFn, Perlin, RidgedMulti, Seedable, Turbulence};
 
-use super::WorldGeneratorOptions;
+use super::WorldGenerationOptions;
 
+/// Options for generating rivers.
 #[derive(Debug, Clone, Copy)]
 pub struct RiverOptions {
+    /// Maximum depth of the rivers.
     pub depth: f64,
 }
 
 impl RiverOptions {
-    pub fn as_noise(&self, world: &WorldGeneratorOptions) -> impl NoiseFn<f64, 2> {
+    /// Creates a noise module that defines the shape of the rivers.
+    pub fn as_noise_module(&self, world: &WorldGenerationOptions) -> impl NoiseFn<f64, 2> {
         let base = RidgedMulti::<Perlin>::new(world.seed + 80)
             .set_frequency(18.75)
             .set_lacunarity(world.continent_lacunarity)

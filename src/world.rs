@@ -5,26 +5,32 @@ use glium::{DrawParameters, Surface};
 use crate::{
     app::Window,
     chunk::{
-        mesh::{Axis, Direction, MeshBuffers},
-        Chunk, ChunkMesher, VoxelUniforms,
+        mesh::{Axis, Direction, Vertex},
+        Chunk, VoxelUniforms,
     },
-    generator::WorldGenerator,
+    generation::WorldGenerationOptions,
+    transform::{Matrix3x3, Matrix4x4},
 };
 
-type ModelMatrix = [[f32; 4]; 4];
-type NormalMatrix = [[f32; 3]; 3];
-
+/// Represents the world.
 pub struct World {
+    /// Chunks in the world that have been generated.
     chunks: HashMap<glam::IVec3, Chunk>,
 
-    chunk_solid_meshes: HashMap<glam::IVec3, MeshBuffers>,
-    chunk_transparent_meshes: HashMap<glam::IVec3, MeshBuffers>,
-    chunk_uniforms: HashMap<glam::IVec3, (ModelMatrix, NormalMatrix)>,
+    /// Meshes for solid voxels of a chunk.
+    chunk_solid_meshes:
+        HashMap<glam::IVec3, (glium::VertexBuffer<Vertex>, glium::IndexBuffer<u32>)>,
+    /// Meshes for transparent voxels of a chunk.
+    chunk_transparent_meshes:
+        HashMap<glam::IVec3, (glium::VertexBuffer<Vertex>, glium::IndexBuffer<u32>)>,
+    /// Uniforms for a chunk.
+    chunk_uniforms: HashMap<glam::IVec3, (Matrix4x4, Matrix3x3)>,
 
     window: Rc<Window>,
 }
 
 impl World {
+    /// Creates a new empty world.
     pub fn new(window: Rc<Window>) -> Self {
         Self {
             chunks: HashMap::new(),
@@ -37,13 +43,20 @@ impl World {
         }
     }
 
-    pub fn update(&mut self, camera_position: glam::Vec3, generator: &WorldGenerator) {
-        let current_chunk_pos = (camera_position / generator.options.chunk_size.as_vec3())
+    /// Updates the world.
+    ///
+    /// This generates new chunks around the camera position.
+    pub fn update(
+        &mut self,
+        camera_position: glam::Vec3,
+        generation_options: &WorldGenerationOptions,
+    ) {
+        let current_chunk_pos = (camera_position / generation_options.chunk_size.as_vec3())
             .floor()
             .as_ivec3();
 
         if self.chunks.get(&current_chunk_pos).is_none() {
-            let chunk = generator.generate_chunk(current_chunk_pos);
+            let chunk = crate::generation::generate_chunk(generation_options, current_chunk_pos);
 
             if !chunk.is_empty() {
                 let mut neighbours = HashMap::new();
@@ -59,17 +72,28 @@ impl World {
                     }
                 }
 
-                let (solid_mesh, transparent_mesh) = ChunkMesher::mesh(&chunk, &neighbours);
+                let (solid_mesh, transparent_mesh) = chunk.mesh(&neighbours);
 
                 if let Some(solid_mesh) = solid_mesh {
-                    let buffers = solid_mesh.as_buffers(&self.window.display);
-                    self.chunk_solid_meshes.insert(current_chunk_pos, buffers);
+                    let vertex_buffer = solid_mesh
+                        .vertex_buffer(&self.window.display)
+                        .expect("to create vertex buffer");
+                    let index_buffer = solid_mesh
+                        .index_buffer(&self.window.display)
+                        .expect("to create index buffer");
+                    self.chunk_solid_meshes
+                        .insert(current_chunk_pos, (vertex_buffer, index_buffer));
                 }
 
                 if let Some(transparent_mesh) = transparent_mesh {
-                    let buffers = transparent_mesh.as_buffers(&self.window.display);
+                    let vertex_buffer = transparent_mesh
+                        .vertex_buffer(&self.window.display)
+                        .expect("to create vertex buffer");
+                    let index_buffer = transparent_mesh
+                        .index_buffer(&self.window.display)
+                        .expect("to create index buffer");
                     self.chunk_transparent_meshes
-                        .insert(current_chunk_pos, buffers);
+                        .insert(current_chunk_pos, (vertex_buffer, index_buffer));
                 }
 
                 self.chunk_uniforms.insert(
@@ -85,6 +109,7 @@ impl World {
         }
     }
 
+    /// Draws the world.
     pub fn draw(
         &self,
         frame: &mut glium::Frame,
@@ -92,13 +117,13 @@ impl World {
         uniforms: VoxelUniforms,
         draw_wireframe: bool,
     ) {
-        for (position, mesh) in self.chunk_solid_meshes.iter() {
+        for (position, (vertex_buffer, index_buffer)) in self.chunk_solid_meshes.iter() {
             let (model, normal) = self.chunk_uniforms.get(position).unwrap();
 
             frame
                 .draw(
-                    &mesh.vertex_buffer,
-                    &mesh.index_buffer,
+                    vertex_buffer,
+                    index_buffer,
                     &shader,
                     &uniform! {
                         view_proj: uniforms.view_projection,
@@ -127,13 +152,13 @@ impl World {
                 .expect("to draw vertices");
         }
 
-        for (position, mesh) in self.chunk_transparent_meshes.iter() {
+        for (position, (vertex_buffer, index_buffer)) in self.chunk_transparent_meshes.iter() {
             let (model, normal) = self.chunk_uniforms.get(position).unwrap();
 
             frame
                 .draw(
-                    &mesh.vertex_buffer,
-                    &mesh.index_buffer,
+                    vertex_buffer,
+                    index_buffer,
                     &shader,
                     &uniform! {
                         view_proj: uniforms.view_projection,

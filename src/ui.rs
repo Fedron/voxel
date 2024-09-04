@@ -2,20 +2,20 @@ use std::rc::Rc;
 
 use winit::{event::WindowEvent, event_loop::EventLoop};
 
-use crate::{app::Window, generator::WorldGeneratorOptions};
+use crate::{app::Window, generation::WorldGenerationOptions};
 
 pub struct WorldGeneratorUi {
     window: Rc<Window>,
     egui: egui_glium::EguiGlium,
 
     seed: String,
-    pub world_generator_options: WorldGeneratorOptions,
+    pub world_generator_options: WorldGenerationOptions,
     pub should_generate_world: bool,
 }
 
 impl WorldGeneratorUi {
     pub fn new(
-        world_generator_options: WorldGeneratorOptions,
+        world_generator_options: WorldGenerationOptions,
         window: Rc<Window>,
         event_loop: &EventLoop<()>,
     ) -> Self {

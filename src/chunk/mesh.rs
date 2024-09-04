@@ -1,3 +1,4 @@
+/// Vertex definition for the voxel shader.
 #[derive(Debug, Clone, Copy)]
 pub struct Vertex {
     pub position: [f32; 3],
@@ -6,6 +7,7 @@ pub struct Vertex {
 }
 implement_vertex!(Vertex, position, normal, color);
 
+/// Cardinal axes of the Cartesian coordinate system.
 #[derive(Debug, Clone, Copy)]
 pub enum Axis {
     X,
@@ -14,6 +16,7 @@ pub enum Axis {
 }
 
 impl Axis {
+    /// Returns the normal vector of the axis in the given direction.
     pub fn get_normal(&self, direction: Direction) -> glam::Vec3 {
         match self {
             Axis::X => match direction {
@@ -32,18 +35,21 @@ impl Axis {
     }
 }
 
+/// Direction of the axis.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum Direction {
     Positive,
     Negative,
 }
 
+/// Represents the mesh of a chunk.
 pub struct Mesh {
     vertices: Vec<Vertex>,
     indices: Vec<u32>,
 }
 
 impl Mesh {
+    /// Creates a new empty mesh.
     pub fn new() -> Self {
         Self {
             vertices: Vec::new(),
@@ -51,10 +57,12 @@ impl Mesh {
         }
     }
 
+    /// Returns whether the mesh is empty.
     pub fn is_empty(&self) -> bool {
         self.vertices.is_empty() || self.indices.is_empty()
     }
 
+    /// Creates an OpenGL vertex buffer from the mesh.
     pub fn vertex_buffer(
         &self,
         display: &glium::Display<glium::glutin::surface::WindowSurface>,
@@ -62,6 +70,7 @@ impl Mesh {
         glium::VertexBuffer::new(display, &self.vertices)
     }
 
+    /// Creates an OpenGL index buffer from the mesh.
     pub fn index_buffer(
         &self,
         display: &glium::Display<glium::glutin::surface::WindowSurface>,
@@ -73,16 +82,7 @@ impl Mesh {
         )
     }
 
-    pub fn as_buffers(
-        &self,
-        display: &glium::Display<glium::glutin::surface::WindowSurface>,
-    ) -> MeshBuffers {
-        MeshBuffers {
-            vertex_buffer: self.vertex_buffer(display).expect("to create buffer"),
-            index_buffer: self.index_buffer(display).expect("to create buffer"),
-        }
-    }
-
+    /// Adds a quad to the mesh.
     pub fn add_quad<P, N, C>(&mut self, p1: P, p2: P, p3: P, p4: P, normal: N, color: C)
     where
         P: Into<[f32; 3]>,
@@ -122,6 +122,7 @@ impl Mesh {
         ]);
     }
 
+    /// Creates a quad facing the given axis and direction, and adds it to the mesh.
     pub fn add_face<C>(
         &mut self,
         position: glam::Vec3,
@@ -184,9 +185,4 @@ impl Mesh {
             color,
         );
     }
-}
-
-pub struct MeshBuffers {
-    pub vertex_buffer: glium::VertexBuffer<Vertex>,
-    pub index_buffer: glium::IndexBuffer<u32>,
 }

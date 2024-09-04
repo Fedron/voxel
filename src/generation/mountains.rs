@@ -3,18 +3,44 @@ use noise::{
     RidgedMulti, ScaleBias, Seedable, Select, Turbulence,
 };
 
-use super::WorldGeneratorOptions;
+use super::WorldGenerationOptions;
 
+/// Options for generating mountains.
 #[derive(Debug, Clone, Copy)]
 pub struct MountainOptions {
+    /// Lacunarity of the mountains generation.
     pub lacunarity: f64,
+    /// Twist of the mountains generation.
     pub twist: f64,
+    /// Amount of glaciation mountains have.
     pub glaciation: f64,
+    /// Amount of mountains to generate.
     pub amount: f64,
 }
 
 impl MountainOptions {
-    pub fn as_noise(&self, world: &WorldGeneratorOptions) -> impl NoiseFn<f64, 2> {
+    /// Creates a noise module that defines the shape of the mountains.
+    pub fn as_noise_module(&self, world: &WorldGenerationOptions) -> impl NoiseFn<f64, 2> {
+        let scaled = ScaleBias::new(self.as_noise(world))
+            .set_scale(0.125)
+            .set_bias(0.125);
+
+        let fbm = Fbm::<Perlin>::new(world.seed + 90)
+            .set_frequency(14.5)
+            .set_persistence(0.5)
+            .set_lacunarity(self.lacunarity)
+            .set_octaves(6);
+
+        let ex = Exponent::new(fbm).set_exponent(1.25);
+
+        let scaled1 = ScaleBias::new(ex).set_scale(0.25).set_bias(1.0);
+
+        let mult = Multiply::new(scaled, scaled1);
+
+        Cache::new(mult)
+    }
+
+    fn as_noise(&self, world: &WorldGenerationOptions) -> impl NoiseFn<f64, 2> {
         let scaled_low = ScaleBias::new(self.as_low_noise(world))
             .set_scale(0.03125)
             .set_bias(-0.96875);
@@ -36,27 +62,7 @@ impl MountainOptions {
         Cache::new(ex)
     }
 
-    pub fn as_scaled_noise(&self, world: &WorldGeneratorOptions) -> impl NoiseFn<f64, 2> {
-        let scaled = ScaleBias::new(self.as_noise(world))
-            .set_scale(0.125)
-            .set_bias(0.125);
-
-        let fbm = Fbm::<Perlin>::new(world.seed + 90)
-            .set_frequency(14.5)
-            .set_persistence(0.5)
-            .set_lacunarity(self.lacunarity)
-            .set_octaves(6);
-
-        let ex = Exponent::new(fbm).set_exponent(1.25);
-
-        let scaled1 = ScaleBias::new(ex).set_scale(0.25).set_bias(1.0);
-
-        let mult = Multiply::new(scaled, scaled1);
-
-        Cache::new(mult)
-    }
-
-    pub fn as_base_noise(&self, world: &WorldGeneratorOptions) -> impl NoiseFn<f64, 2> {
+    fn as_base_noise(&self, world: &WorldGenerationOptions) -> impl NoiseFn<f64, 2> {
         let base = RidgedMulti::<Perlin>::new(world.seed + 30)
             .set_frequency(1723.0)
             .set_lacunarity(self.lacunarity)
@@ -90,7 +96,7 @@ impl MountainOptions {
         Cache::new(tu)
     }
 
-    pub fn as_high_noise(&self, world: &WorldGeneratorOptions) -> impl NoiseFn<f64, 2> {
+    fn as_high_noise(&self, world: &WorldGenerationOptions) -> impl NoiseFn<f64, 2> {
         let base = RidgedMulti::<Perlin>::new(world.seed + 40)
             .set_frequency(2371.0)
             .set_lacunarity(self.lacunarity)
@@ -112,7 +118,7 @@ impl MountainOptions {
         Cache::new(tu)
     }
 
-    pub fn as_low_noise(&self, world: &WorldGeneratorOptions) -> impl NoiseFn<f64, 2> {
+    fn as_low_noise(&self, world: &WorldGenerationOptions) -> impl NoiseFn<f64, 2> {
         let base = RidgedMulti::<Perlin>::new(world.seed + 50)
             .set_frequency(1381.0)
             .set_lacunarity(self.lacunarity)
