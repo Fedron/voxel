@@ -25,6 +25,7 @@ struct Channel<T> {
 
 /// Represents the world.
 pub struct World {
+    render_distance: u8,
     /// Chunks in the world that have been generated.
     chunks: HashMap<glam::IVec3, Chunk>,
 
@@ -45,7 +46,7 @@ pub struct World {
 
 impl World {
     /// Creates a new empty world.
-    pub fn new(window: Rc<Window>) -> Self {
+    pub fn new(window: Rc<Window>, render_distance: u8) -> Self {
         let (tx, rx) = std::sync::mpsc::channel();
         let chunk_generator_channel = Channel::<Chunk> {
             tx,
@@ -61,6 +62,7 @@ impl World {
         };
 
         Self {
+            render_distance,
             chunks: HashMap::new(),
 
             chunk_generator_channel,
@@ -82,28 +84,36 @@ impl World {
         camera_position: glam::Vec3,
         generation_options: &WorldGenerationOptions,
     ) {
-        let current_chunk_pos = (camera_position / generation_options.chunk_size.as_vec3())
+        let center_chunk_pos = (camera_position / generation_options.chunk_size.as_vec3())
             .floor()
             .as_ivec3();
 
-        if self.chunks.get(&current_chunk_pos).is_none()
-            && !self
-                .chunk_generator_channel
-                .in_process
-                .contains(&current_chunk_pos)
+        for x in (center_chunk_pos.x - self.render_distance as i32)
+            ..=(center_chunk_pos.x + self.render_distance as i32)
         {
-            self.chunk_generator_channel
-                .in_process
-                .insert(current_chunk_pos);
+            for y in (center_chunk_pos.y - self.render_distance as i32)
+                ..=(center_chunk_pos.y + self.render_distance as i32)
+            {
+                for z in (center_chunk_pos.z - self.render_distance as i32)
+                    ..=(center_chunk_pos.z + self.render_distance as i32)
+                {
+                    let chunk_pos = glam::IVec3::new(x, y, z);
+                    if self.chunks.get(&chunk_pos).is_none()
+                        && !self.chunk_generator_channel.in_process.contains(&chunk_pos)
+                    {
+                        self.chunk_generator_channel.in_process.insert(chunk_pos);
 
-            let tx = self.chunk_generator_channel.tx.clone();
-            let generation_options = generation_options.clone();
-            thread::spawn(move || {
-                let chunk =
-                    crate::generation::generate_chunk(generation_options, current_chunk_pos);
-                tx.send(chunk)
-                    .expect("to send generated chunk back to main thread");
-            });
+                        let tx = self.chunk_generator_channel.tx.clone();
+                        let generation_options = generation_options.clone();
+                        thread::spawn(move || {
+                            let chunk =
+                                crate::generation::generate_chunk(generation_options, chunk_pos);
+                            tx.send(chunk)
+                                .expect("to send generated chunk back to main thread");
+                        });
+                    }
+                }
+            }
         }
 
         if let Ok(chunk) = self.chunk_generator_channel.rx.try_recv() {

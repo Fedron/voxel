@@ -217,7 +217,7 @@ impl VoxelApp {
             river_options: RiverOptions { depth: 0.0234375 },
         };
 
-        let world = World::new(window.clone());
+        let world = World::new(window.clone(), 1);
         let world_generator_ui =
             WorldGeneratorUi::new(world_generation_options, window.clone(), event_loop);
 
