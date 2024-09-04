@@ -229,7 +229,7 @@ impl WorldGenerationOptions {
 }
 
 /// Generates a chunk of voxels using the given world generation options.
-pub fn generate_chunk(options: &WorldGenerationOptions, grid_position: glam::IVec3) -> Chunk {
+pub fn generate_chunk(options: WorldGenerationOptions, grid_position: glam::IVec3) -> Chunk {
     let noise_module = options.as_noise_module();
 
     let mut chunk = Chunk::new(grid_position, options.chunk_size);
@@ -238,7 +238,7 @@ pub fn generate_chunk(options: &WorldGenerationOptions, grid_position: glam::IVe
     for x in 0..options.chunk_size.x {
         for z in 0..options.chunk_size.z {
             let color = match get_height(
-                options,
+                &options,
                 &noise_module,
                 world_position + glam::dvec3(x as f64, 0.0, z as f64),
             ) {

@@ -59,9 +59,10 @@ impl Voxel {
 }
 
 /// Represents a chunk of the world.
+#[derive(Debug, Clone)]
 pub struct Chunk {
     /// The grid position of the chunk.
-    grid_position: glam::IVec3,
+    pub grid_position: glam::IVec3,
     /// The size of the chunk.
     size: glam::UVec3,
     /// The transform of the chunk.
@@ -122,7 +123,7 @@ impl Chunk {
     /// Returns a tuple of two optional meshes. The first mesh is the solid mesh and the second mesh is the transparent mesh.
     pub fn mesh(
         &self,
-        chunk_neighbours: &HashMap<glam::IVec3, &Chunk>,
+        chunk_neighbours: &HashMap<glam::IVec3, Chunk>,
     ) -> (Option<Mesh>, Option<Mesh>) {
         let mesh = {
             let mesh = self.greedy_mesh(
@@ -155,7 +156,7 @@ impl Chunk {
 
     fn greedy_mesh<V, N>(
         &self,
-        chunk_neighbours: &HashMap<glam::IVec3, &Chunk>,
+        chunk_neighbours: &HashMap<glam::IVec3, Chunk>,
         voxel_to_mesh: V,
         neighbour_condition: N,
     ) -> Mesh
@@ -302,7 +303,7 @@ impl Chunk {
 
     fn voxel_has_neigbour(
         &self,
-        chunk_neighbours: &HashMap<glam::IVec3, &Chunk>,
+        chunk_neighbours: &HashMap<glam::IVec3, Chunk>,
         voxel_position: glam::UVec3,
         axis: Axis,
         direction: Direction,

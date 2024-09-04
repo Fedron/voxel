@@ -1,21 +1,35 @@
-use std::{collections::HashMap, rc::Rc};
+use std::{
+    collections::{HashMap, HashSet},
+    rc::Rc,
+    sync::mpsc::{Receiver, Sender},
+    thread,
+};
 
 use glium::{DrawParameters, Surface};
 
 use crate::{
     app::Window,
     chunk::{
-        mesh::{Axis, Direction, Vertex},
+        mesh::{Axis, Direction, Mesh, Vertex},
         Chunk, VoxelUniforms,
     },
     generation::WorldGenerationOptions,
     transform::{Matrix3x3, Matrix4x4},
 };
 
+struct Channel<T> {
+    tx: Sender<T>,
+    rx: Receiver<T>,
+    in_process: HashSet<glam::IVec3>,
+}
+
 /// Represents the world.
 pub struct World {
     /// Chunks in the world that have been generated.
     chunks: HashMap<glam::IVec3, Chunk>,
+
+    chunk_generator_channel: Channel<Chunk>,
+    chunk_meshing_channel: Channel<(glam::IVec3, Option<Mesh>, Option<Mesh>)>,
 
     /// Meshes for solid voxels of a chunk.
     chunk_solid_meshes:
@@ -32,8 +46,25 @@ pub struct World {
 impl World {
     /// Creates a new empty world.
     pub fn new(window: Rc<Window>) -> Self {
+        let (tx, rx) = std::sync::mpsc::channel();
+        let chunk_generator_channel = Channel::<Chunk> {
+            tx,
+            rx,
+            in_process: HashSet::new(),
+        };
+
+        let (tx, rx) = std::sync::mpsc::channel();
+        let chunk_meshing_channel = Channel::<(glam::IVec3, Option<Mesh>, Option<Mesh>)> {
+            tx,
+            rx,
+            in_process: HashSet::new(),
+        };
+
         Self {
             chunks: HashMap::new(),
+
+            chunk_generator_channel,
+            chunk_meshing_channel,
 
             chunk_solid_meshes: HashMap::new(),
             chunk_transparent_meshes: HashMap::new(),
@@ -55,8 +86,30 @@ impl World {
             .floor()
             .as_ivec3();
 
-        if self.chunks.get(&current_chunk_pos).is_none() {
-            let chunk = crate::generation::generate_chunk(generation_options, current_chunk_pos);
+        if self.chunks.get(&current_chunk_pos).is_none()
+            && !self
+                .chunk_generator_channel
+                .in_process
+                .contains(&current_chunk_pos)
+        {
+            self.chunk_generator_channel
+                .in_process
+                .insert(current_chunk_pos);
+
+            let tx = self.chunk_generator_channel.tx.clone();
+            let generation_options = generation_options.clone();
+            thread::spawn(move || {
+                let chunk =
+                    crate::generation::generate_chunk(generation_options, current_chunk_pos);
+                tx.send(chunk)
+                    .expect("to send generated chunk back to main thread");
+            });
+        }
+
+        if let Ok(chunk) = self.chunk_generator_channel.rx.try_recv() {
+            self.chunk_generator_channel
+                .in_process
+                .remove(&chunk.grid_position);
 
             if !chunk.is_empty() {
                 let mut neighbours = HashMap::new();
@@ -64,48 +117,59 @@ impl World {
                 for axis in [Axis::X, Axis::Y, Axis::Z] {
                     for direction in [Direction::Positive, Direction::Negative] {
                         let neighbour_position =
-                            current_chunk_pos + axis.get_normal(direction).as_ivec3();
+                            chunk.grid_position + axis.get_normal(direction).as_ivec3();
 
                         if let Some(neighbour) = self.chunks.get(&neighbour_position) {
-                            neighbours.insert(neighbour_position, neighbour);
+                            neighbours.insert(neighbour_position, (*neighbour).clone());
                         }
                     }
                 }
 
-                let (solid_mesh, transparent_mesh) = chunk.mesh(&neighbours);
-
-                if let Some(solid_mesh) = solid_mesh {
-                    let vertex_buffer = solid_mesh
-                        .vertex_buffer(&self.window.display)
-                        .expect("to create vertex buffer");
-                    let index_buffer = solid_mesh
-                        .index_buffer(&self.window.display)
-                        .expect("to create index buffer");
-                    self.chunk_solid_meshes
-                        .insert(current_chunk_pos, (vertex_buffer, index_buffer));
-                }
-
-                if let Some(transparent_mesh) = transparent_mesh {
-                    let vertex_buffer = transparent_mesh
-                        .vertex_buffer(&self.window.display)
-                        .expect("to create vertex buffer");
-                    let index_buffer = transparent_mesh
-                        .index_buffer(&self.window.display)
-                        .expect("to create index buffer");
-                    self.chunk_transparent_meshes
-                        .insert(current_chunk_pos, (vertex_buffer, index_buffer));
-                }
-
-                self.chunk_uniforms.insert(
-                    current_chunk_pos,
-                    (
-                        chunk.transform().model_matrix().to_cols_array_2d(),
-                        chunk.transform().normal_matrix().to_cols_array_2d(),
-                    ),
-                );
-
-                self.chunks.insert(current_chunk_pos, chunk);
+                let tx = self.chunk_meshing_channel.tx.clone();
+                let chunk = chunk.clone();
+                thread::spawn(move || {
+                    let (solid_mesh, transparent_mesh) = chunk.mesh(&neighbours);
+                    tx.send((chunk.grid_position, solid_mesh, transparent_mesh))
+                        .expect("to send generated mesh back to main thread");
+                });
             }
+
+            self.chunks.insert(chunk.grid_position, chunk);
+        }
+
+        if let Ok((grid_position, solid_mesh, transparent_mesh)) =
+            self.chunk_meshing_channel.rx.try_recv()
+        {
+            if let Some(solid_mesh) = solid_mesh {
+                let vertex_buffer = solid_mesh
+                    .vertex_buffer(&self.window.display)
+                    .expect("to create vertex buffer");
+                let index_buffer = solid_mesh
+                    .index_buffer(&self.window.display)
+                    .expect("to create index buffer");
+                self.chunk_solid_meshes
+                    .insert(grid_position, (vertex_buffer, index_buffer));
+            }
+
+            if let Some(transparent_mesh) = transparent_mesh {
+                let vertex_buffer = transparent_mesh
+                    .vertex_buffer(&self.window.display)
+                    .expect("to create vertex buffer");
+                let index_buffer = transparent_mesh
+                    .index_buffer(&self.window.display)
+                    .expect("to create index buffer");
+                self.chunk_transparent_meshes
+                    .insert(grid_position, (vertex_buffer, index_buffer));
+            }
+
+            let chunk = self.chunks.get(&grid_position).unwrap();
+            self.chunk_uniforms.insert(
+                grid_position,
+                (
+                    chunk.transform().model_matrix().to_cols_array_2d(),
+                    chunk.transform().normal_matrix().to_cols_array_2d(),
+                ),
+            );
         }
     }
 
