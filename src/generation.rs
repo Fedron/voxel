@@ -235,8 +235,10 @@ impl WorldGenerationOptions {
 
 impl WorldGenerationOptions {
     /// Returns the height of the sea level in voxels.
-    pub fn sea_level_voxels(&self) -> u32 {
-        self.sea_level.remap(-1.0, 1.0, 0.0, self.max_height as f64) as u32
+    pub fn sea_level_voxels(&self) -> i32 {
+        self.sea_level
+            .remap(-1.0, 1.0, 0.0, self.max_height as f64)
+            .floor() as i32
     }
 }
 
@@ -250,16 +252,16 @@ pub fn generate_chunk(options: WorldGenerationOptions, grid_position: glam::IVec
     for x in 0..options.chunk_size.x {
         for z in 0..options.chunk_size.z {
             let position = world_position + glam::dvec3(x as f64, 0.0, z as f64);
-            let height = noise_module
+            let terrain_height = noise_module
                 .get([position.x, position.z])
                 .remap(-1.0, 1.0, 0.0, options.max_height as f64)
-                .floor() as u32;
+                .floor() as i32;
 
-            for y in 0..options.chunk_size.y {
-                let global_y = options.chunk_size.y * grid_position.y as u32 + y;
-                let position = glam::uvec3(x, y, z);
+            for y in 0..options.chunk_size.y as i32 {
+                let global_y = options.chunk_size.y as i32 * grid_position.y + y;
+                let position = glam::uvec3(x, y as u32, z);
 
-                if global_y == height {
+                if global_y == terrain_height {
                     chunk.set_voxel(
                         position,
                         if global_y <= options.sea_level_voxels() {
@@ -268,8 +270,9 @@ pub fn generate_chunk(options: WorldGenerationOptions, grid_position: glam::IVec
                             Voxel::Grass
                         },
                     );
-                } else if global_y >= height.saturating_sub(options.dirt_layer_thickness)
-                    && global_y < height
+                } else if global_y
+                    >= terrain_height.saturating_sub(options.dirt_layer_thickness as i32)
+                    && global_y < terrain_height
                 {
                     chunk.set_voxel(
                         position,
@@ -279,7 +282,7 @@ pub fn generate_chunk(options: WorldGenerationOptions, grid_position: glam::IVec
                             Voxel::Dirt
                         },
                     )
-                } else if global_y < height {
+                } else if global_y < terrain_height {
                     chunk.set_voxel(position, Voxel::Stone)
                 } else if global_y <= options.sea_level_voxels() {
                     chunk.set_voxel(position, Voxel::Water)
