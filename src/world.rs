@@ -76,6 +76,14 @@ impl World {
         }
     }
 
+    /// Clears the world.
+    pub fn clear(&mut self) {
+        self.chunks.clear();
+        self.chunk_solid_meshes.clear();
+        self.chunk_transparent_meshes.clear();
+        self.chunk_uniforms.clear();
+    }
+
     /// Updates the world.
     ///
     /// This generates new chunks around the camera position.

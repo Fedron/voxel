@@ -115,13 +115,12 @@ impl AppBehaviour for VoxelApp {
         self.world
             .update(self.camera.position, &self.world_generation_options);
 
-        // if self.world_generator_ui.should_generate_world {
-        //     self.world_generator_ui.should_generate_world = false;
+        if self.world_generator_ui.should_generate_world {
+            self.world_generator_ui.should_generate_world = false;
 
-        //     let world_generator =
-        //         WorldGenerator::new(self.world_generator_ui.world_generator_options.clone());
-        //     self.world = World::new(&self.window, &world_generator);
-        // }
+            self.world.clear();
+            self.world_generation_options = self.world_generator_ui.world_generator_options.clone();
+        }
     }
 
     fn render(&mut self, frame: &mut glium::Frame) {
@@ -194,7 +193,7 @@ impl VoxelApp {
             max_height: 128,
             dirt_layer_thickness: 5,
 
-            continent_frequency: 0.01,
+            continent_frequency: 0.001,
             continent_lacunarity: 2.208984375,
             continent_height_scale: 0.25,
             sea_level: 0.0,
