@@ -187,10 +187,13 @@ impl Chunk {
                             let neighbour_position =
                                 (position.as_vec3() + axis.get_normal(direction)).as_ivec3();
                             if neighbour_position.x < 0
+                                || neighbour_position.x >= self.size.x as i32
                                 || neighbour_position.y < 0
+                                || neighbour_position.y >= self.size.y as i32
                                 || neighbour_position.z < 0
+                                || neighbour_position.z >= self.size.z as i32
                             {
-                                if self.voxel_has_neigbour(
+                                if !self.voxel_has_neigbour(
                                     chunk_neighbours,
                                     position,
                                     axis,
@@ -201,23 +204,9 @@ impl Chunk {
                                 }
                             } else {
                                 let neighbour_voxel = self.get_voxel(neighbour_position.as_uvec3());
-
-                                match neighbour_voxel {
-                                    Some(neighbour) => {
-                                        if !neighbour_condition(*neighbour) {
-                                            continue;
-                                        }
-                                    }
-                                    None => {
-                                        if self.voxel_has_neigbour(
-                                            chunk_neighbours,
-                                            position,
-                                            axis,
-                                            direction,
-                                            &neighbour_condition,
-                                        ) {
-                                            continue;
-                                        }
+                                if let Some(neighbour_voxel) = neighbour_voxel {
+                                    if !neighbour_condition(*neighbour_voxel) {
+                                        continue;
                                     }
                                 }
                             }
@@ -329,7 +318,7 @@ impl Chunk {
             };
 
             if let Some(neighbour_voxel) = neighbour_chunk.get_voxel(neighbour_position) {
-                if !condition(*neighbour_voxel) {
+                if condition(*neighbour_voxel) {
                     return true;
                 }
             }
