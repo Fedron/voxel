@@ -191,6 +191,8 @@ impl VoxelApp {
         let world_generation_options = WorldGenerationOptions {
             seed: 1337,
             chunk_size: glam::UVec3::splat(32),
+            max_height: 128,
+            dirt_layer_thickness: 5,
 
             continent_frequency: 0.01,
             continent_lacunarity: 2.208984375,

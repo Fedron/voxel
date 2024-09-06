@@ -1,3 +1,4 @@
+use glam::FloatExt;
 use noise::{
     Add, Cache, Clamp, Curve, Fbm, Min, MultiFractal, NoiseFn, Perlin, RidgedMulti, ScaleBias,
     Seedable, Select, Terrace, Turbulence,
@@ -17,6 +18,10 @@ pub struct WorldGenerationOptions {
     pub seed: u32,
     /// Size of each chunk in voxels.
     pub chunk_size: glam::UVec3,
+    /// Maximum height of the world, in voxels.
+    pub max_height: u32,
+    /// Thickness of the dirt layer, in voxels.
+    pub dirt_layer_thickness: u32,
 
     /// Frequency of generated continents.
     pub continent_frequency: f64,
@@ -228,6 +233,13 @@ impl WorldGenerationOptions {
     }
 }
 
+impl WorldGenerationOptions {
+    /// Returns the height of the sea level in voxels.
+    pub fn sea_level_voxels(&self) -> u32 {
+        self.sea_level.remap(-1.0, 1.0, 0.0, self.max_height as f64) as u32
+    }
+}
+
 /// Generates a chunk of voxels using the given world generation options.
 pub fn generate_chunk(options: WorldGenerationOptions, grid_position: glam::IVec3) -> Chunk {
     let noise_module = options.as_noise_module();
@@ -237,60 +249,44 @@ pub fn generate_chunk(options: WorldGenerationOptions, grid_position: glam::IVec
 
     for x in 0..options.chunk_size.x {
         for z in 0..options.chunk_size.z {
-            let color = match get_height(
-                &options,
-                &noise_module,
-                world_position + glam::dvec3(x as f64, 0.0, z as f64),
-            ) {
-                Height::DeepOcean => [16, 23, 77],
-                Height::Ocean => [37, 104, 207],
-                Height::Shore => [51, 152, 241],
-                Height::Plain => [63, 210, 64],
-                Height::Hill => [33, 156, 34],
-                Height::Mountain => [105, 107, 109],
-                Height::Peak => [227, 233, 239],
-            };
+            let position = world_position + glam::dvec3(x as f64, 0.0, z as f64);
+            let height = noise_module
+                .get([position.x, position.z])
+                .remap(-1.0, 1.0, 0.0, options.max_height as f64)
+                .floor() as u32;
 
-            chunk.set_voxel(
-                glam::uvec3(x, 0, z),
-                Voxel::Color([color[0], color[1], color[2], 255]),
-            );
+            for y in 0..options.chunk_size.y {
+                let global_y = options.chunk_size.y * grid_position.y as u32 + y;
+                let position = glam::uvec3(x, y, z);
+
+                if global_y == height {
+                    chunk.set_voxel(
+                        position,
+                        if global_y <= options.sea_level_voxels() {
+                            Voxel::Sand
+                        } else {
+                            Voxel::Grass
+                        },
+                    );
+                } else if global_y >= height.saturating_sub(options.dirt_layer_thickness)
+                    && global_y < height
+                {
+                    chunk.set_voxel(
+                        position,
+                        if global_y <= options.sea_level_voxels() {
+                            Voxel::Sand
+                        } else {
+                            Voxel::Dirt
+                        },
+                    )
+                } else if global_y < height {
+                    chunk.set_voxel(position, Voxel::Stone)
+                } else if global_y <= options.sea_level_voxels() {
+                    chunk.set_voxel(position, Voxel::Water)
+                }
+            }
         }
     }
 
     chunk
-}
-
-enum Height {
-    DeepOcean,
-    Ocean,
-    Shore,
-    Plain,
-    Hill,
-    Mountain,
-    Peak,
-}
-
-fn get_height(
-    options: &WorldGenerationOptions,
-    noise_module: &impl NoiseFn<f64, 2>,
-    position: glam::DVec3,
-) -> Height {
-    let height = noise_module.get([position.x, position.z]);
-
-    if height < options.sea_level - 0.5 {
-        Height::DeepOcean
-    } else if height < options.sea_level {
-        Height::Ocean
-    } else if height < options.sea_level + 0.125 {
-        Height::Shore
-    } else if height < options.sea_level + 0.25 {
-        Height::Plain
-    } else if height < options.sea_level + 0.5 {
-        Height::Hill
-    } else if height < options.sea_level + 0.75 {
-        Height::Mountain
-    } else {
-        Height::Peak
-    }
 }
