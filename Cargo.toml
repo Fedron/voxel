@@ -4,16 +4,9 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-bytemuck = { version = "1.17.0", features = ["derive"] }
-crossbeam-skiplist = "0.1.3"
-egui = "0.26.2"
-egui-winit = "0.28.1"
-egui_glium = "0.26.3"
-glam = { version = "0.29.0", features = ["bytemuck"] }
-glium = "0.34.0"
-noise = "0.9.0"
-num-derive = "0.4.2"
-num-traits = "0.2.19"
-rand = "0.8.5"
-rayon = "1.10.0"
+vulkano = { git = "https://github.com/vulkano-rs/vulkano.git", features = [
+    "macros",
+] }
+vulkano-shaders = { git = "https://github.com/vulkano-rs/vulkano.git" }
+vulkano-util = { git = "https://github.com/vulkano-rs/vulkano.git" }
 winit = "0.29"
