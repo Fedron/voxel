@@ -4,9 +4,6 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-vulkano = { git = "https://github.com/vulkano-rs/vulkano.git", features = [
-    "macros",
-] }
+vulkano = { git = "https://github.com/vulkano-rs/vulkano.git", default-features = true }
 vulkano-shaders = { git = "https://github.com/vulkano-rs/vulkano.git" }
-vulkano-util = { git = "https://github.com/vulkano-rs/vulkano.git" }
 winit = "0.29"
