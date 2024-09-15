@@ -1,151 +1,230 @@
-use winit::{event::ElementState, keyboard::KeyCode};
+use std::time::Duration;
 
+use glam::{vec3, Mat3, Mat4, Quat, Vec3};
+use winit::{
+    event::{DeviceEvent, ElementState, Event, KeyEvent, MouseButton, WindowEvent},
+    keyboard::{KeyCode, PhysicalKey},
+};
+
+const MOVE_SPEED: f32 = 3.0;
+const ANGLE_PER_POINT: f32 = 0.001745;
+
+const FORWARD_KEYCODE: KeyCode = KeyCode::KeyW;
+const BACKWARD_KEYCODE: KeyCode = KeyCode::KeyS;
+const RIGHT_KEYCODE: KeyCode = KeyCode::KeyD;
+const LEFT_KEYCODE: KeyCode = KeyCode::KeyA;
+const UP_KEYCODE: KeyCode = KeyCode::Space;
+const DOWN_KEYCODE: KeyCode = KeyCode::ControlLeft;
+
+#[derive(Debug, Clone, Copy)]
 pub struct Camera {
-    pub position: glam::Vec3,
-    yaw: f32,
-    pitch: f32,
+    pub position: Vec3,
+    pub direction: Vec3,
+    pub fov: f32,
+    pub aspect_ratio: f32,
+    pub z_near: f32,
+    pub z_far: f32,
 }
 
 impl Camera {
-    pub fn new(position: glam::Vec3, yaw: f32, pitch: f32) -> Self {
+    pub fn new(
+        position: Vec3,
+        direction: Vec3,
+        fov: f32,
+        aspect_ratio: f32,
+        z_near: f32,
+        z_far: f32,
+    ) -> Self {
         Self {
             position,
-            yaw,
-            pitch,
-        }
-    }
-
-    pub fn view_matrix(&self) -> glam::Mat4 {
-        let (sin_pitch, cos_pitch) = self.pitch.sin_cos();
-        let (sin_yaw, cos_yaw) = self.yaw.sin_cos();
-        let front =
-            glam::Vec3::new(cos_pitch * cos_yaw, sin_pitch, cos_pitch * sin_yaw).normalize();
-
-        glam::Mat4::look_at_rh(self.position, self.position + front, glam::Vec3::Y)
-    }
-}
-
-pub struct Projection {
-    aspect: f32,
-    fov: f32,
-    near: f32,
-    far: f32,
-}
-
-impl Projection {
-    pub fn new(aspect: f32, fov: f32, near: f32, far: f32) -> Self {
-        Self {
-            aspect,
+            direction: direction.normalize(),
             fov,
-            near,
-            far,
+            aspect_ratio,
+            z_near,
+            z_far,
         }
     }
 
-    pub fn resize(&mut self, width: f32, height: f32) {
-        self.aspect = width / height;
-    }
+    pub fn update(self, controls: &CameraControls, delta_time: Duration) -> Self {
+        let delta_time = delta_time.as_secs_f32();
+        let side = self.direction.cross(glam::Vec3::Y);
 
-    pub fn matrix(&self) -> glam::Mat4 {
-        glam::Mat4::perspective_rh(self.fov.to_radians(), self.aspect, self.near, self.far)
-    }
-}
+        let new_direction = if controls.look_around {
+            let side_rot = Quat::from_axis_angle(side, -controls.cursor_delta[1] * ANGLE_PER_POINT);
+            let y_rot = Quat::from_rotation_y(-controls.cursor_delta[0] * ANGLE_PER_POINT);
+            let rot = Mat3::from_quat(side_rot * y_rot);
 
-pub struct CameraController {
-    amount_left: f32,
-    amount_right: f32,
-    amount_forward: f32,
-    amount_backward: f32,
-    amount_up: f32,
-    amount_down: f32,
-    rotate_horizontal: f32,
-    rotate_vertical: f32,
-    current_speed: f32,
-    original_speed: f32,
-    sensitivity: f32,
-}
-
-impl CameraController {
-    pub fn new(speed: f32, sensitivity: f32) -> Self {
-        Self {
-            amount_left: 0.0,
-            amount_right: 0.0,
-            amount_forward: 0.0,
-            amount_backward: 0.0,
-            amount_up: 0.0,
-            amount_down: 0.0,
-            rotate_horizontal: 0.0,
-            rotate_vertical: 0.0,
-            current_speed: speed,
-            original_speed: speed,
-            sensitivity,
-        }
-    }
-
-    pub fn process_keyboard(&mut self, key: KeyCode, state: ElementState) {
-        if key == KeyCode::ControlLeft {
-            self.current_speed = if state == ElementState::Pressed {
-                self.original_speed * 4.0
-            } else {
-                self.original_speed
-            };
-        }
-
-        let amount = if state == ElementState::Pressed {
-            1.0
+            (rot * self.direction).normalize()
         } else {
-            0.0
+            self.direction
         };
-        match key {
-            KeyCode::KeyW | KeyCode::ArrowUp => {
-                self.amount_forward = amount;
+
+        let mut direction = Vec3::ZERO;
+
+        if controls.go_forward {
+            direction += new_direction;
+        }
+        if controls.go_backward {
+            direction -= new_direction;
+        }
+        if controls.strafe_right {
+            direction += side;
+        }
+        if controls.strafe_left {
+            direction -= side;
+        }
+        if controls.go_up {
+            direction += glam::Vec3::Y;
+        }
+        if controls.go_down {
+            direction -= glam::Vec3::Y;
+        }
+
+        let direction = if direction.length_squared() == 0.0 {
+            direction
+        } else {
+            direction.normalize()
+        };
+
+        Self {
+            position: self.position + direction * MOVE_SPEED * delta_time,
+            direction: new_direction,
+            ..self
+        }
+    }
+
+    pub fn view_matrix(&self) -> Mat4 {
+        Mat4::look_at_rh(
+            self.position,
+            self.position + self.direction,
+            vec3(0.0, 1.0, 0.0),
+        )
+    }
+
+    pub fn view_matrix_at_center(&self) -> Mat4 {
+        Mat4::look_at_rh(Vec3::ZERO, self.direction, vec3(0.0, 1.0, 0.0))
+    }
+
+    pub fn projection_matrix(&self) -> Mat4 {
+        perspective(
+            self.fov.to_radians(),
+            self.aspect_ratio,
+            self.z_near,
+            self.z_far,
+        )
+    }
+}
+
+#[rustfmt::skip]
+pub fn perspective(fovy: f32, aspect: f32, near: f32, far: f32) -> Mat4 {
+    
+    let f = (fovy / 2.0).tan().recip();
+
+    let c0r0 = f / aspect;
+    let c0r1 = 0.0f32;
+    let c0r2 = 0.0f32;
+    let c0r3 = 0.0f32;
+
+    let c1r0 = 0.0f32;
+    let c1r1 = -f;
+    let c1r2 = 0.0f32;
+    let c1r3 = 0.0f32;
+
+    let c2r0 = 0.0f32;
+    let c2r1 = 0.0f32;
+    let c2r2 = -far / (far - near);
+    let c2r3 = -1.0f32;
+
+    let c3r0 = 0.0f32;
+    let c3r1 = 0.0f32;
+    let c3r2 = -(far * near) / (far - near);
+    let c3r3 = 0.0f32;
+
+    Mat4::from_cols_array(&[
+        c0r0, c0r1, c0r2, c0r3,
+        c1r0, c1r1, c1r2, c1r3,
+        c2r0, c2r1, c2r2, c2r3,
+        c3r0, c3r1, c3r2, c3r3
+    ])
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct CameraControls {
+    pub go_forward: bool,
+    pub go_backward: bool,
+    pub strafe_right: bool,
+    pub strafe_left: bool,
+    pub go_up: bool,
+    pub go_down: bool,
+    pub look_around: bool,
+    pub cursor_delta: [f32; 2],
+}
+
+impl Default for CameraControls {
+    fn default() -> Self {
+        Self {
+            go_forward: false,
+            go_backward: false,
+            strafe_right: false,
+            strafe_left: false,
+            go_up: false,
+            go_down: false,
+            look_around: false,
+            cursor_delta: [0.0; 2],
+        }
+    }
+}
+
+impl CameraControls {
+    pub fn reset(self) -> Self {
+        Self {
+            cursor_delta: [0.0; 2],
+            ..self
+        }
+    }
+
+    pub fn handle_event(self, event: &Event<()>) -> Self {
+        let mut new_state = self;
+
+        match event {
+            Event::WindowEvent { event, .. } => {
+                match event {
+                    WindowEvent::KeyboardInput {
+                        event:
+                            KeyEvent {
+                                physical_key: PhysicalKey::Code(code),
+                                state,
+                                ..
+                            },
+                        ..
+                    } => match *code {
+                        FORWARD_KEYCODE => new_state.go_forward = *state == ElementState::Pressed,
+                        BACKWARD_KEYCODE => new_state.go_backward = *state == ElementState::Pressed,
+                        RIGHT_KEYCODE => new_state.strafe_right = *state == ElementState::Pressed,
+                        LEFT_KEYCODE => new_state.strafe_left = *state == ElementState::Pressed,
+                        UP_KEYCODE => new_state.go_up = *state == ElementState::Pressed,
+                        DOWN_KEYCODE => new_state.go_down = *state == ElementState::Pressed,
+                        _ => (),
+                    },
+                    WindowEvent::MouseInput { state, button, .. } => {
+                        if *button == MouseButton::Right {
+                            new_state.look_around = *state == ElementState::Pressed;
+                        }
+                    }
+                    _ => {}
+                };
             }
-            KeyCode::KeyS | KeyCode::ArrowDown => {
-                self.amount_backward = amount;
-            }
-            KeyCode::KeyA | KeyCode::ArrowLeft => {
-                self.amount_left = amount;
-            }
-            KeyCode::KeyD | KeyCode::ArrowRight => {
-                self.amount_right = amount;
-            }
-            KeyCode::Space => {
-                self.amount_up = amount;
-            }
-            KeyCode::ShiftLeft => {
-                self.amount_down = amount;
+            Event::DeviceEvent {
+                event: DeviceEvent::MouseMotion { delta: (x, y) },
+                ..
+            } => {
+                let x = *x as f32;
+                let y = *y as f32;
+                new_state.cursor_delta = [self.cursor_delta[0] + x, self.cursor_delta[1] + y];
             }
             _ => (),
         }
-    }
 
-    pub fn process_mouse(&mut self, mouse_dx: f32, mouse_dy: f32) {
-        self.rotate_horizontal = mouse_dx;
-        self.rotate_vertical = -mouse_dy;
-    }
-
-    pub fn update_camera(&mut self, camera: &mut Camera, delta_time: f32) {
-        let front = glam::Vec3::new(
-            camera.yaw.cos() * camera.pitch.cos(),
-            camera.pitch.sin(),
-            camera.yaw.sin() * camera.pitch.cos(),
-        )
-        .normalize();
-        let right = front.cross(glam::Vec3::Y).normalize();
-
-        let move_speed = self.current_speed * delta_time;
-        let rotate_speed = self.sensitivity * delta_time;
-
-        camera.position += front * (self.amount_forward - self.amount_backward) * move_speed;
-        camera.position += right * (self.amount_right - self.amount_left) * move_speed;
-        camera.position += glam::Vec3::Y * (self.amount_up - self.amount_down) * move_speed;
-
-        camera.yaw += self.rotate_horizontal * rotate_speed;
-        camera.pitch += self.rotate_vertical * rotate_speed;
-
-        camera.pitch = camera.pitch.clamp(-89.0, 89.0);
-
-        self.rotate_horizontal = 0.0;
-        self.rotate_vertical = 0.0;
+        new_state
     }
 }
