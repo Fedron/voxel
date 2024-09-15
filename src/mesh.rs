@@ -10,7 +10,7 @@ use vulkano::{
         AccelerationStructureInstance, AccelerationStructureType, BuildAccelerationStructureFlags,
         BuildAccelerationStructureMode, GeometryFlags, GeometryInstanceFlags,
     },
-    buffer::{Buffer, BufferContents, BufferCreateInfo, BufferUsage, Subbuffer},
+    buffer::{Buffer, BufferContents, BufferCreateInfo, BufferUsage, IndexBuffer, Subbuffer},
     command_buffer::{
         allocator::CommandBufferAllocator, CommandBufferBeginInfo, CommandBufferLevel,
         CommandBufferUsage, RecordingCommandBuffer,
@@ -57,6 +57,22 @@ impl Mesh {
         )
         .unwrap();
 
+        let index_buffer = Buffer::from_iter(
+            memory_allocator.clone(),
+            BufferCreateInfo {
+                usage: BufferUsage::ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY
+                    | BufferUsage::SHADER_DEVICE_ADDRESS,
+                ..Default::default()
+            },
+            AllocationCreateInfo {
+                memory_type_filter: MemoryTypeFilter::PREFER_DEVICE
+                    | MemoryTypeFilter::HOST_SEQUENTIAL_WRITE,
+                ..Default::default()
+            },
+            self.indices.clone(),
+        )
+        .unwrap();
+
         let max_vertex = vertex_buffer.len() as u32;
         let primitive_count = max_vertex / 3;
         let triangles = AccelerationStructureGeometryTrianglesData {
@@ -64,7 +80,7 @@ impl Mesh {
             vertex_data: Some(vertex_buffer.into_bytes()),
             vertex_stride: Vertex::per_vertex().stride,
             max_vertex,
-            index_data: None,
+            index_data: Some(IndexBuffer::U32(index_buffer)),
             transform_data: None,
             ..AccelerationStructureGeometryTrianglesData::new(
                 Vertex::per_vertex().members.get("position").unwrap().format,

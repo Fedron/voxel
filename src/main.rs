@@ -332,16 +332,19 @@ fn main() -> Result<(), impl Error> {
     let triangle_mesh = Mesh {
         vertices: vec![
             Vertex {
-                position: [-0.5, -0.25, 1.0],
+                position: [-0.5, -0.5, 1.0],
             },
             Vertex {
-                position: [0.0, 0.5, 1.0],
+                position: [0.5, -0.5, 1.0],
             },
             Vertex {
-                position: [0.25, -0.1, 1.0],
+                position: [0.5, 0.5, 1.0],
+            },
+            Vertex {
+                position: [-0.5, 0.5, 1.0],
             },
         ],
-        indices: vec![0, 1, 2],
+        indices: vec![0, 1, 2, 0, 1, 3],
     };
 
     let triangle_blas = triangle_mesh.as_blas(
