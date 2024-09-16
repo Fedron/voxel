@@ -4,20 +4,27 @@ use std::{
 };
 
 use anyhow::Result;
+use camera::{Camera, CameraControls};
+use egui_plot::Legend;
+use gui::{
+    egui::{self, Align2, ClippedPrimitive, FullOutput, TextureId},
+    GuiContext,
+};
 use simplelog::TermLogger;
 use vulkan::{
     ash::vk, gpu_allocator::MemoryLocation, AcquiredImage, CommandBuffer, CommandPool, Context,
-    ContextBuilder, DeviceFeatures, Fence, Image, ImageBarrier, ImageView, Semaphore,
-    SemaphoreSubmitInfo, Swapchain, TimestampQueryPool, VERSION_1_3,
+    ContextBuilder, DeviceFeatures, Fence, Image, ImageBarrier, ImageView, RenderingAttachment,
+    Semaphore, SemaphoreSubmitInfo, Swapchain, TimestampQueryPool, VERSION_1_3,
 };
 use winit::{
     dpi::PhysicalSize,
-    event::{Event, WindowEvent},
+    event::{ElementState, Event, KeyEvent, WindowEvent},
     event_loop::{ControlFlow, EventLoop},
+    keyboard::{KeyCode, PhysicalKey},
     window::{Window, WindowBuilder},
 };
 
-use crate::camera::{Camera, CameraControls};
+mod camera;
 
 const IN_FLIGHT_FRAMES: u32 = 2;
 
@@ -28,7 +35,23 @@ pub struct AppConfig<'a, 'b> {
     pub enable_independent_blend: bool,
 }
 
+pub trait Gui: Sized {
+    fn new<A: App>(base: &BaseApp<A>) -> Result<Self>;
+
+    fn build(&mut self, ui: &egui::Context);
+}
+
+impl Gui for () {
+    fn new<A: App>(_base: &BaseApp<A>) -> Result<Self> {
+        Ok(())
+    }
+
+    fn build(&mut self, _ui: &egui::Context) {}
+}
+
 pub trait App: Sized {
+    type Gui: Gui;
+
     fn new(base: &mut BaseApp<Self>) -> Result<Self>;
 
     fn update(
@@ -54,15 +77,17 @@ pub struct BaseApp<A: App> {
     phantom: PhantomData<A>,
     raytracing_enabled: bool,
 
+    pub context: Context,
     pub swapchain: Swapchain,
     pub command_pool: CommandPool,
     pub storage_images: Vec<ImageAndView>,
     pub command_buffers: Vec<CommandBuffer>,
     in_flight_frames: InFlightFrames,
 
-    pub camera: Camera,
+    pub gui_context: GuiContext,
+    stats_display_mode: StatsDisplayMode,
 
-    pub context: Context,
+    pub camera: Camera,
     requested_swapchain_format: Option<vk::SurfaceFormatKHR>,
 }
 
@@ -129,6 +154,9 @@ impl<A: App> BaseApp<A> {
             1000.0,
         );
 
+        let gui_context =
+            GuiContext::new(&context, swapchain.format, window, IN_FLIGHT_FRAMES as _)?;
+
         Ok(Self {
             phantom: PhantomData,
             raytracing_enabled: enable_raytracing,
@@ -139,6 +167,9 @@ impl<A: App> BaseApp<A> {
             storage_images,
             command_buffers,
             in_flight_frames,
+
+            gui_context,
+            stats_display_mode: StatsDisplayMode::Basic,
 
             camera,
             requested_swapchain_format: None,
@@ -171,6 +202,10 @@ impl<A: App> BaseApp<A> {
             let _ = std::mem::replace(&mut self.storage_images, storage_images);
         }
 
+        if let Some(format) = format {
+            self.gui_context.update_framebuffer_params(format.format)?;
+        }
+
         self.camera.aspect_ratio = width as f32 / height as f32;
 
         Ok(())
@@ -184,6 +219,7 @@ impl<A: App> BaseApp<A> {
         &mut self,
         window: &Window,
         base_app: &mut A,
+        gui: &mut A::Gui,
         frame_stats: &mut FrameStats,
     ) -> Result<bool> {
         self.in_flight_frames.next();
@@ -208,9 +244,47 @@ impl<A: App> BaseApp<A> {
         };
         self.in_flight_frames.fence().reset()?;
 
+        if !self.in_flight_frames.gui_textures_to_free().is_empty() {
+            self.gui_context
+                .free_textures(&self.in_flight_frames.gui_textures_to_free())?;
+        }
+
+        let raw_input = self.gui_context.take_input(window);
+
+        let FullOutput {
+            platform_output,
+            textures_delta,
+            shapes,
+            pixels_per_point,
+            ..
+        } = self.gui_context.run(raw_input, |ctx| {
+            gui.build(ctx);
+            self.build_performance_ui(ctx, frame_stats);
+        });
+
+        self.gui_context
+            .handle_platform_output(window, platform_output);
+
+        if !textures_delta.free.is_empty() {
+            self.in_flight_frames
+                .set_gui_textures_to_free(textures_delta.free);
+        }
+
+        if !textures_delta.set.is_empty() {
+            self.gui_context
+                .set_textures(
+                    self.context.graphics_queue.inner,
+                    self.context.command_pool.inner,
+                    textures_delta.set.as_slice(),
+                )
+                .expect("failed to update texture");
+        }
+
+        let primitives = self.gui_context.tessellate(shapes, pixels_per_point);
+
         base_app.update(self, image_index, frame_stats.frame_time)?;
 
-        self.record_command_buffer(image_index, base_app)?;
+        self.record_command_buffer(image_index, base_app, pixels_per_point, &primitives)?;
 
         let command_buffer = &self.command_buffers[image_index];
         self.context.graphics_queue.submit(
@@ -244,7 +318,13 @@ impl<A: App> BaseApp<A> {
         Ok(false)
     }
 
-    fn record_command_buffer(&mut self, image_index: usize, base_app: &A) -> Result<()> {
+    fn record_command_buffer(
+        &mut self,
+        image_index: usize,
+        base_app: &A,
+        pixels_per_point: f32,
+        primitives: &[ClippedPrimitive],
+    ) -> Result<()> {
         self.command_buffers[image_index].reset()?;
         self.command_buffers[image_index].begin(None)?;
         self.command_buffers[image_index]
@@ -325,6 +405,25 @@ impl<A: App> BaseApp<A> {
 
         base_app.record_raster_commands(self, image_index)?;
 
+        self.command_buffers[image_index].begin_rendering(
+            &[RenderingAttachment {
+                view: &self.swapchain.views[image_index],
+                load_op: vk::AttachmentLoadOp::DONT_CARE,
+                clear_value: None,
+            }],
+            None,
+            self.swapchain.extent,
+        );
+
+        self.gui_context.renderer.cmd_draw(
+            self.command_buffers[image_index].inner,
+            self.swapchain.extent,
+            pixels_per_point,
+            primitives,
+        )?;
+
+        self.command_buffers[image_index].end_rendering();
+
         self.command_buffers[image_index].pipeline_image_barriers(&[ImageBarrier {
             image: &self.swapchain.images[image_index],
             old_layout: vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL,
@@ -344,6 +443,73 @@ impl<A: App> BaseApp<A> {
         self.command_buffers[image_index].end()?;
 
         Ok(())
+    }
+
+    fn build_performance_ui(&self, ctx: &gui::egui::Context, frame_stats: &mut FrameStats) {
+        if matches!(
+            self.stats_display_mode,
+            StatsDisplayMode::Basic | StatsDisplayMode::Full
+        ) {
+            egui::Window::new("Frame Stats")
+                .anchor(Align2::RIGHT_TOP, [-5.0, 5.0])
+                .collapsible(false)
+                .interactable(false)
+                .resizable(false)
+                .drag_to_scroll(false)
+                .show(ctx, |ui| {
+                    ui.label(format!("{} FPS", frame_stats.fps_counter));
+                    ui.add_space(0.5);
+
+                    ui.label(format!("Frame Time: {:.2?}", frame_stats.frame_time));
+                    ui.label(format!("CPU Time: {:.2?}", frame_stats.cpu_time));
+                    ui.label(format!("GPU Time: {:.2?}", frame_stats.gpu_time));
+                });
+        }
+
+        if matches!(self.stats_display_mode, StatsDisplayMode::Full) {
+            egui::TopBottomPanel::bottom("frametime_graphs").show(ctx, |ui| {
+                ui.label("Frame Time (ms)");
+
+                let frame_time: egui_plot::PlotPoints = frame_stats
+                    .frame_time_ms_log
+                    .0
+                    .iter()
+                    .enumerate()
+                    .map(|(i, v)| [i as f64, *v as f64])
+                    .collect();
+
+                let cpu_time: egui_plot::PlotPoints = frame_stats
+                    .cpu_time_ms_log
+                    .0
+                    .iter()
+                    .enumerate()
+                    .map(|(i, v)| [i as f64, *v as f64])
+                    .collect();
+
+                let gpu_time: egui_plot::PlotPoints = frame_stats
+                    .cpu_time_ms_log
+                    .0
+                    .iter()
+                    .enumerate()
+                    .map(|(i, v)| [i as f64, *v as f64])
+                    .collect();
+
+                egui_plot::Plot::new("frame_time")
+                    .height(80.0)
+                    .allow_boxed_zoom(false)
+                    .allow_double_click_reset(false)
+                    .allow_drag(false)
+                    .allow_scroll(false)
+                    .allow_zoom(false)
+                    .show_axes([false, true])
+                    .legend(Legend::default())
+                    .show(ui, |plot| {
+                        plot.line(egui_plot::Line::new(frame_time).name("Frame Time"));
+                        plot.line(egui_plot::Line::new(cpu_time).name("CPU Time"));
+                        plot.line(egui_plot::Line::new(gpu_time).name("GPU Time"));
+                    });
+            });
+        }
     }
 }
 
@@ -371,6 +537,7 @@ pub fn run<A: App + 'static>(
 
     let mut base_app = BaseApp::new(&window, app_name, app_config)?;
     let mut app = A::new(&mut base_app)?;
+    let mut ui = A::Gui::new(&base_app)?;
 
     let mut camera_controls = CameraControls::default();
     let mut is_swapchain_dirty = false;
@@ -390,13 +557,25 @@ pub fn run<A: App + 'static>(
                 frame_stats.set_frame_time(frame_time);
                 camera_controls = camera_controls.reset();
             }
-            Event::WindowEvent { event, .. } => match event {
-                WindowEvent::Resized(..) => {
-                    is_swapchain_dirty = true;
+            Event::WindowEvent { event, .. } => {
+                base_app.gui_context.handle_event(&window, &event);
+                match event {
+                    WindowEvent::Resized(..) => {
+                        is_swapchain_dirty = true;
+                    }
+                    WindowEvent::KeyboardInput {
+                        event:
+                            KeyEvent {
+                                physical_key: PhysicalKey::Code(KeyCode::F3),
+                                state: ElementState::Pressed,
+                                ..
+                            },
+                        ..
+                    } => base_app.stats_display_mode = base_app.stats_display_mode.next(),
+                    WindowEvent::CloseRequested => ewlt.exit(),
+                    _ => {}
                 }
-                WindowEvent::CloseRequested => ewlt.exit(),
-                _ => {}
-            },
+            }
             Event::AboutToWait => {
                 if is_swapchain_dirty || base_app.requested_swapchain_format.is_some() {
                     let dimensions = window.inner_size();
@@ -418,7 +597,7 @@ pub fn run<A: App + 'static>(
                     .update(&camera_controls, frame_stats.frame_time);
 
                 is_swapchain_dirty = base_app
-                    .draw(&window, app, &mut frame_stats)
+                    .draw(&window, app, &mut ui, &mut frame_stats)
                     .expect("failed to draw");
             }
             Event::LoopExiting => base_app
@@ -486,6 +665,7 @@ struct PerFrame {
     render_finished_semaphore: Semaphore,
     fence: Fence,
     timing_query_pool: TimestampQueryPool<2>,
+    gui_textures_to_free: Vec<TextureId>,
 }
 
 impl InFlightFrames {
@@ -497,12 +677,14 @@ impl InFlightFrames {
                 let fence = context.create_fence(Some(vk::FenceCreateFlags::SIGNALED))?;
 
                 let timing_query_pool = context.create_timestamp_query_pool()?;
+                let gui_textures_to_free = Vec::new();
 
                 Ok(PerFrame {
                     image_available_semaphore,
                     render_finished_semaphore,
                     fence,
                     timing_query_pool,
+                    gui_textures_to_free,
                 })
             })
             .collect::<Result<Vec<_>>>()?;
@@ -531,6 +713,14 @@ impl InFlightFrames {
 
     fn timing_query_pool(&self) -> &TimestampQueryPool<2> {
         &self.per_frames[self.current_frame].timing_query_pool
+    }
+
+    fn gui_textures_to_free(&self) -> &[TextureId] {
+        &self.per_frames[self.current_frame].gui_textures_to_free
+    }
+
+    fn set_gui_textures_to_free(&mut self, ids: Vec<TextureId>) {
+        self.per_frames[self.current_frame].gui_textures_to_free = ids;
     }
 
     fn gpu_frame_time_ms(&self) -> Result<Duration> {
@@ -623,5 +813,22 @@ impl<T> Queue<T> {
             self.0.remove(0);
         }
         self.0.push(value);
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum StatsDisplayMode {
+    None,
+    Basic,
+    Full,
+}
+
+impl StatsDisplayMode {
+    fn next(self) -> Self {
+        match self {
+            Self::None => Self::Basic,
+            Self::Basic => Self::Full,
+            Self::Full => Self::None,
+        }
     }
 }

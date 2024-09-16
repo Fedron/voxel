@@ -5,10 +5,16 @@ name = "voxel"
 version = "0.1.0"
 edition = "2021"
 
-[dependencies]
+[workspace.dependencies]
 anyhow = "1.0.89"
 glam = "0.29.0"
 log = "0.4.22"
 simplelog = "0.12.2"
-vulkan = { path = "crates/vulkan" }
 winit = { version = "0.29", features = ["rwh_06"] }
+
+[dependencies]
+anyhow.workspace = true
+
+app = { path = "crates/app" }
+gui = { path = "crates/gui" }
+vulkan = { path = "crates/vulkan" }

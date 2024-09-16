@@ -1,0 +1,15 @@
+[package]
+name = "app"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+anyhow.workspace = true
+glam.workspace = true
+log.workspace = true
+simplelog.workspace = true
+winit.workspace = true
+
+gui = { path = "../gui" }
+vulkan = { path = "../vulkan" }
+egui_plot = "0.28.1"

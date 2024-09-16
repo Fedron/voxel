@@ -9,9 +9,6 @@ use vulkan::{
     RayTracingShaderGroup, ShaderBindingTable, WriteDescriptorSet, WriteDescriptorSetKind,
 };
 
-mod app;
-mod camera;
-
 fn main() -> Result<()> {
     app::run::<VoxelApp>(
         "Voxel",
@@ -33,6 +30,8 @@ struct VoxelApp {
 }
 
 impl App for VoxelApp {
+    type Gui = ();
+
     fn new(base: &mut app::BaseApp<Self>) -> Result<Self> {
         let context = &mut base.context;
 
@@ -120,6 +119,7 @@ struct Blas {
 impl Blas {
     fn new(context: &mut Context) -> Result<Self> {
         #[derive(Debug, Clone, Copy)]
+        #[allow(dead_code)]
         struct Vertex {
             pos: [f32; 2],
         }

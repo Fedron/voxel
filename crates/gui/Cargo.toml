@@ -1,0 +1,18 @@
+[package]
+name = "gui"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+anyhow.workspace = true
+log.workspace = true
+winit.workspace = true
+
+egui = "0.28.1"
+egui-ash-renderer = { version = "0.5.0", features = [
+    "gpu-allocator",
+    "dynamic-rendering",
+] }
+egui-winit = "0.28.1"
+
+vulkan = { path = "../vulkan" }
