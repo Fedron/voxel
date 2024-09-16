@@ -77,7 +77,6 @@ pub struct BaseApp<A: App> {
     phantom: PhantomData<A>,
     raytracing_enabled: bool,
 
-    pub context: Context,
     pub swapchain: Swapchain,
     pub command_pool: CommandPool,
     pub storage_images: Vec<ImageAndView>,
@@ -86,6 +85,7 @@ pub struct BaseApp<A: App> {
 
     pub gui_context: GuiContext,
     stats_display_mode: StatsDisplayMode,
+    pub context: Context,
 
     pub camera: Camera,
     requested_swapchain_format: Option<vk::SurfaceFormatKHR>,
@@ -161,7 +161,6 @@ impl<A: App> BaseApp<A> {
             phantom: PhantomData,
             raytracing_enabled: enable_raytracing,
 
-            context,
             command_pool,
             swapchain,
             storage_images,
@@ -170,6 +169,7 @@ impl<A: App> BaseApp<A> {
 
             gui_context,
             stats_display_mode: StatsDisplayMode::Basic,
+            context,
 
             camera,
             requested_swapchain_format: None,
@@ -456,9 +456,11 @@ impl<A: App> BaseApp<A> {
                 .interactable(false)
                 .resizable(false)
                 .drag_to_scroll(false)
+                .min_size([150.0, 0.0])
+                .max_size([150.0, 100.0])
                 .show(ctx, |ui| {
                     ui.label(format!("{} FPS", frame_stats.fps_counter));
-                    ui.add_space(0.5);
+                    ui.separator();
 
                     ui.label(format!("Frame Time: {:.2?}", frame_stats.frame_time));
                     ui.label(format!("CPU Time: {:.2?}", frame_stats.cpu_time));
