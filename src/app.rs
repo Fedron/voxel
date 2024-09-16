@@ -405,7 +405,9 @@ pub fn run<A: App + 'static>(
                     if dimensions.width > 0 && dimensions.height > 0 {
                         base_app
                             .recreate_swapchain(dimensions.width, dimensions.height, format)
-                            .expect("failed to create swapchain")
+                            .expect("failed to recreate swapchain on the base app");
+                        app.on_recreate_swapchain(&base_app)
+                            .expect("failed to recreate swapchain in the user app");
                     } else {
                         return;
                     }
