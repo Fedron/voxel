@@ -80,8 +80,8 @@ impl App for VoxelApp {
         _delta_time: std::time::Duration,
     ) -> Result<()> {
         self.scene_ubo.copy_data_to_buffer(&[SceneUbo {
-            view_inverse: base.camera.view_matrix().inverse(),
-            proj_inverse: base.camera.projection_matrix().inverse(),
+            view_inverse: base.camera.matrix().inverse(),
+            proj_inverse: base.projection.matrix().inverse(),
         }])?;
 
         Ok(())

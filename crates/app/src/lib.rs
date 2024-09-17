@@ -3,7 +3,7 @@ use std::time::{Duration, Instant};
 
 use anyhow::Result;
 use app::{App, BaseApp};
-use camera::CameraControls;
+use camera::CameraController;
 use egui::TextureId;
 use simplelog::TermLogger;
 use utils::Queue;
@@ -57,14 +57,14 @@ pub fn run<A: App + 'static>(
     let mut app = A::new(&mut base_app)?;
     let mut ui = A::Gui::new(&base_app)?;
 
-    let mut camera_controls = CameraControls::default();
+    let mut camera_controller = CameraController::new(10.0, 1.2);
     let mut is_swapchain_dirty = false;
     let mut last_frame = Instant::now();
     let mut frame_stats = FrameStats::default();
 
     event_loop.run(move |event, ewlt| {
         let app = &mut app;
-        camera_controls = camera_controls.handle_event(&event);
+        camera_controller.handle_event(&event);
 
         match event {
             Event::NewEvents(_) => {
@@ -73,7 +73,6 @@ pub fn run<A: App + 'static>(
                 last_frame = now;
 
                 frame_stats.set_frame_time(frame_time);
-                camera_controls = camera_controls.reset();
             }
             Event::WindowEvent { event, .. } => {
                 base_app.gui_context.handle_event(&window, &event);
@@ -110,9 +109,8 @@ pub fn run<A: App + 'static>(
                     }
                 }
 
-                base_app.camera = base_app
-                    .camera
-                    .update(&camera_controls, frame_stats.frame_time);
+                camera_controller
+                    .update_camera(&mut base_app.camera, frame_stats.frame_time.as_secs_f32());
 
                 is_swapchain_dirty = base_app
                     .draw(&window, app, &mut ui, &mut frame_stats)

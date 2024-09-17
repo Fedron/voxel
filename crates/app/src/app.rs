@@ -10,7 +10,7 @@ use vulkan::{
 use winit::window::Window;
 
 use crate::{
-    camera::Camera,
+    camera::{Camera, Projection},
     gui::{Gui, GuiContext},
     utils::{create_command_buffers, create_storage_images},
     AppConfig, FrameStats, ImageAndView, InFlightFrames, StatsDisplayMode, IN_FLIGHT_FRAMES,
@@ -55,6 +55,8 @@ pub struct BaseApp<A: App> {
     pub context: Context,
 
     pub camera: Camera,
+    pub projection: Projection,
+
     pub(crate) requested_swapchain_format: Option<vk::SurfaceFormatKHR>,
 }
 
@@ -112,11 +114,10 @@ impl<A: App> BaseApp<A> {
         let command_buffers = create_command_buffers(&command_pool, &swapchain)?;
         let in_flight_frames = InFlightFrames::new(&context, IN_FLIGHT_FRAMES)?;
 
-        let camera = Camera::new(
-            glam::Vec3::Z,
-            glam::Vec3::NEG_Z,
-            60.0,
+        let camera = Camera::new(glam::Vec3::Z, -90.0_f32.to_radians(), 0.0);
+        let projection = Projection::new(
             window.inner_size().width as f32 / window.inner_size().height as f32,
+            60.0,
             0.1,
             1000.0,
         );
@@ -139,6 +140,8 @@ impl<A: App> BaseApp<A> {
             context,
 
             camera,
+            projection,
+
             requested_swapchain_format: None,
         })
     }
@@ -169,7 +172,7 @@ impl<A: App> BaseApp<A> {
             self.gui_context.update_framebuffer_params(format.format)?;
         }
 
-        self.camera.aspect_ratio = width as f32 / height as f32;
+        self.projection.resize(width as f32, height as f32);
 
         Ok(())
     }
