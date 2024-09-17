@@ -1,3 +1,19 @@
+use crate::app::{App, BaseApp};
+
+pub trait Gui: Sized {
+    fn new<A: App>(base: &BaseApp<A>) -> anyhow::Result<Self>;
+
+    fn build(&mut self, ui: &egui::Context);
+}
+
+impl Gui for () {
+    fn new<A: App>(_base: &BaseApp<A>) -> anyhow::Result<Self> {
+        Ok(())
+    }
+
+    fn build(&mut self, _ui: &egui::Context) {}
+}
+
 pub extern crate egui;
 pub extern crate egui_ash_renderer;
 pub extern crate egui_winit;

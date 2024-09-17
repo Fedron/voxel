@@ -1,6 +1,9 @@
 use anyhow::Result;
 
-use app::{App, AppConfig, ImageAndView};
+use app::{
+    app::{App, BaseApp},
+    AppConfig, ImageAndView,
+};
 use vulkan::{
     ash::vk::{self, Packed24_8},
     gpu_allocator::MemoryLocation,
@@ -42,7 +45,7 @@ struct VoxelApp {
 impl App for VoxelApp {
     type Gui = ();
 
-    fn new(base: &mut app::BaseApp<Self>) -> Result<Self> {
+    fn new(base: &mut BaseApp<Self>) -> Result<Self> {
         let context = &mut base.context;
 
         let blas = Blas::new(context)?;
@@ -72,7 +75,7 @@ impl App for VoxelApp {
 
     fn update(
         &mut self,
-        base: &mut app::BaseApp<Self>,
+        base: &mut BaseApp<Self>,
         _image_index: usize,
         _delta_time: std::time::Duration,
     ) -> Result<()> {
@@ -86,7 +89,7 @@ impl App for VoxelApp {
 
     fn record_raytracing_commands(
         &self,
-        base: &app::BaseApp<Self>,
+        base: &BaseApp<Self>,
         buffer: &vulkan::CommandBuffer,
         image_index: usize,
     ) -> Result<()> {
@@ -109,14 +112,14 @@ impl App for VoxelApp {
         Ok(())
     }
 
-    fn record_raster_commands(&self, base: &app::BaseApp<Self>, image_index: usize) -> Result<()> {
+    fn record_raster_commands(&self, base: &BaseApp<Self>, image_index: usize) -> Result<()> {
         let _ = base;
         let _ = image_index;
 
         Ok(())
     }
 
-    fn on_recreate_swapchain(&mut self, base: &app::BaseApp<Self>) -> Result<()> {
+    fn on_recreate_swapchain(&mut self, base: &BaseApp<Self>) -> Result<()> {
         base.storage_images
             .iter()
             .enumerate()

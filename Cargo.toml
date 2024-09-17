@@ -17,5 +17,4 @@ anyhow.workspace = true
 glam.workspace = true
 
 app = { path = "crates/app" }
-gui = { path = "crates/gui" }
 vulkan = { path = "crates/vulkan" }

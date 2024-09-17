@@ -10,6 +10,12 @@ log.workspace = true
 simplelog.workspace = true
 winit.workspace = true
 
-gui = { path = "../gui" }
-vulkan = { path = "../vulkan" }
+egui = "0.28.1"
+egui-ash-renderer = { version = "0.5.0", features = [
+    "gpu-allocator",
+    "dynamic-rendering",
+] }
 egui_plot = "0.28.1"
+egui-winit = "0.28.1"
+
+vulkan = { path = "../vulkan" }

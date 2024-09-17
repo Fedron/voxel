@@ -69,9 +69,11 @@ name = "app"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "egui",
+ "egui-ash-renderer",
+ "egui-winit",
  "egui_plot",
  "glam",
- "gui",
  "log",
  "simplelog",
  "vulkan",
@@ -636,19 +638,6 @@ dependencies = [
  "log",
  "presser",
  "thiserror",
-]
-
-[[package]]
-name = "gui"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "egui",
- "egui-ash-renderer",
- "egui-winit",
- "log",
- "vulkan",
- "winit",
 ]
 
 [[package]]
@@ -1569,7 +1558,6 @@ dependencies = [
  "anyhow",
  "app",
  "glam",
- "gui",
  "vulkan",
 ]
 
