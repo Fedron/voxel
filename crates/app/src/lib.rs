@@ -176,10 +176,6 @@ impl<A: App> BaseApp<A> {
         })
     }
 
-    pub fn request_swapchain_format_change(&mut self, format: vk::SurfaceFormatKHR) {
-        self.requested_swapchain_format = Some(format);
-    }
-
     fn recreate_swapchain(
         &mut self,
         width: u32,
@@ -548,7 +544,7 @@ pub fn run<A: App + 'static>(
 
     event_loop.run(move |event, ewlt| {
         let app = &mut app;
-        camera_controls.handle_event(&event);
+        camera_controls = camera_controls.handle_event(&event);
 
         match event {
             Event::NewEvents(_) => {

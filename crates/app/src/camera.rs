@@ -1,8 +1,8 @@
 use std::time::Duration;
 
-use glam::{vec3, Mat3, Mat4, Quat, Vec3};
+use glam::{Mat3, Mat4, Quat, Vec3};
 use winit::{
-    event::{DeviceEvent, ElementState, Event, KeyEvent, MouseButton, WindowEvent},
+    event::{DeviceEvent, ElementState, Event, KeyEvent, WindowEvent},
     keyboard::{KeyCode, PhysicalKey},
 };
 
@@ -49,14 +49,12 @@ impl Camera {
         let delta_time = delta_time.as_secs_f32();
         let side = self.direction.cross(glam::Vec3::Y);
 
-        let new_direction = if controls.look_around {
-            let side_rot = Quat::from_axis_angle(side, -controls.cursor_delta[1] * ANGLE_PER_POINT);
+        let new_direction = {
+            let side_rot = Quat::from_axis_angle(side, controls.cursor_delta[1] * ANGLE_PER_POINT);
             let y_rot = Quat::from_rotation_y(-controls.cursor_delta[0] * ANGLE_PER_POINT);
             let rot = Mat3::from_quat(side_rot * y_rot);
 
             (rot * self.direction).normalize()
-        } else {
-            self.direction
         };
 
         let mut direction = Vec3::ZERO;
@@ -94,58 +92,17 @@ impl Camera {
     }
 
     pub fn view_matrix(&self) -> Mat4 {
-        Mat4::look_at_rh(
-            self.position,
-            self.position + self.direction,
-            vec3(0.0, 1.0, 0.0),
-        )
-    }
-
-    pub fn view_matrix_at_center(&self) -> Mat4 {
-        Mat4::look_at_rh(Vec3::ZERO, self.direction, vec3(0.0, 1.0, 0.0))
+        Mat4::look_at_rh(self.position, self.position + self.direction, glam::Vec3::Y)
     }
 
     pub fn projection_matrix(&self) -> Mat4 {
-        perspective(
+        Mat4::perspective_rh(
             self.fov.to_radians(),
             self.aspect_ratio,
             self.z_near,
             self.z_far,
         )
     }
-}
-
-#[rustfmt::skip]
-pub fn perspective(fovy: f32, aspect: f32, near: f32, far: f32) -> Mat4 {
-    
-    let f = (fovy / 2.0).tan().recip();
-
-    let c0r0 = f / aspect;
-    let c0r1 = 0.0f32;
-    let c0r2 = 0.0f32;
-    let c0r3 = 0.0f32;
-
-    let c1r0 = 0.0f32;
-    let c1r1 = -f;
-    let c1r2 = 0.0f32;
-    let c1r3 = 0.0f32;
-
-    let c2r0 = 0.0f32;
-    let c2r1 = 0.0f32;
-    let c2r2 = -far / (far - near);
-    let c2r3 = -1.0f32;
-
-    let c3r0 = 0.0f32;
-    let c3r1 = 0.0f32;
-    let c3r2 = -(far * near) / (far - near);
-    let c3r3 = 0.0f32;
-
-    Mat4::from_cols_array(&[
-        c0r0, c0r1, c0r2, c0r3,
-        c1r0, c1r1, c1r2, c1r3,
-        c2r0, c2r1, c2r2, c2r3,
-        c3r0, c3r1, c3r2, c3r3
-    ])
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -156,7 +113,6 @@ pub struct CameraControls {
     pub strafe_left: bool,
     pub go_up: bool,
     pub go_down: bool,
-    pub look_around: bool,
     pub cursor_delta: [f32; 2],
 }
 
@@ -169,7 +125,6 @@ impl Default for CameraControls {
             strafe_left: false,
             go_up: false,
             go_down: false,
-            look_around: false,
             cursor_delta: [0.0; 2],
         }
     }
@@ -206,11 +161,6 @@ impl CameraControls {
                         DOWN_KEYCODE => new_state.go_down = *state == ElementState::Pressed,
                         _ => (),
                     },
-                    WindowEvent::MouseInput { state, button, .. } => {
-                        if *button == MouseButton::Right {
-                            new_state.look_around = *state == ElementState::Pressed;
-                        }
-                    }
                     _ => {}
                 };
             }

@@ -3,6 +3,7 @@ use anyhow::Result;
 use app::{App, AppConfig, ImageAndView};
 use vulkan::{
     ash::vk::{self, Packed24_8},
+    gpu_allocator::MemoryLocation,
     utils::create_gpu_only_buffer_from_data,
     AccelerationStructure, Buffer, Context, DescriptorPool, DescriptorSet, DescriptorSetLayout,
     PipelineLayout, RayTracingPipeline, RayTracingPipelineCreateInfo, RayTracingShaderCreateInfo,
@@ -21,9 +22,18 @@ fn main() -> Result<()> {
     )
 }
 
+#[derive(Debug, Clone, Copy)]
+#[repr(C)]
+struct SceneUbo {
+    view_inverse: glam::Mat4,
+    proj_inverse: glam::Mat4,
+}
+
 struct VoxelApp {
     _blas: Blas,
     _tlas: Tlas,
+
+    scene_ubo: Buffer,
     pipeline: Pipeline,
     shader_binding_table: ShaderBindingTable,
     descriptor_sets: DescriptorSets,
@@ -39,11 +49,21 @@ impl App for VoxelApp {
         let tlas = Tlas::new(context, &[&blas])?;
         let pipeline = Pipeline::new(context)?;
         let shader_binding_table = context.create_shader_binding_table(&pipeline.inner)?;
-        let descriptor_sets = DescriptorSets::new(context, &pipeline, &tlas, &base.storage_images)?;
+
+        let scene_ubo = context.create_buffer(
+            vk::BufferUsageFlags::UNIFORM_BUFFER,
+            MemoryLocation::CpuToGpu,
+            std::mem::size_of::<SceneUbo>() as _,
+        )?;
+
+        let descriptor_sets =
+            DescriptorSets::new(context, &pipeline, &tlas, &base.storage_images, &scene_ubo)?;
 
         Ok(Self {
             _blas: blas,
             _tlas: tlas,
+
+            scene_ubo,
             pipeline,
             shader_binding_table,
             descriptor_sets,
@@ -52,10 +72,15 @@ impl App for VoxelApp {
 
     fn update(
         &mut self,
-        _base: &mut app::BaseApp<Self>,
+        base: &mut app::BaseApp<Self>,
         _image_index: usize,
         _delta_time: std::time::Duration,
     ) -> Result<()> {
+        self.scene_ubo.copy_data_to_buffer(&[SceneUbo {
+            view_inverse: base.camera.view_matrix().inverse(),
+            proj_inverse: base.camera.projection_matrix().inverse(),
+        }])?;
+
         Ok(())
     }
 
@@ -65,15 +90,15 @@ impl App for VoxelApp {
         buffer: &vulkan::CommandBuffer,
         image_index: usize,
     ) -> Result<()> {
-        let static_set = &self.descriptor_sets.static_set;
-        let dynamic_set = &self.descriptor_sets.dynamic_sets[image_index];
-
         buffer.bind_rt_pipeline(&self.pipeline.inner);
         buffer.bind_descriptor_sets(
             vk::PipelineBindPoint::RAY_TRACING_KHR,
             &self.pipeline.layout,
             0,
-            &[static_set, dynamic_set],
+            &[
+                &self.descriptor_sets.static_set,
+                &self.descriptor_sets.dynamic_sets[image_index],
+            ],
         );
         buffer.trace_rays(
             &self.shader_binding_table,
@@ -98,7 +123,7 @@ impl App for VoxelApp {
             .for_each(|(index, image)| {
                 let set = &self.descriptor_sets.dynamic_sets[index];
                 set.update(&[WriteDescriptorSet {
-                    binding: 1,
+                    binding: 0,
                     kind: WriteDescriptorSetKind::StorageImage {
                         view: &image.view,
                         layout: vk::ImageLayout::GENERAL,
@@ -266,15 +291,28 @@ struct Pipeline {
 
 impl Pipeline {
     fn new(context: &Context) -> Result<Self> {
-        let static_layout_bindings = [vk::DescriptorSetLayoutBinding::default()
-            .binding(0)
-            .descriptor_type(vk::DescriptorType::ACCELERATION_STRUCTURE_KHR)
-            .descriptor_count(1)
-            .stage_flags(vk::ShaderStageFlags::RAYGEN_KHR | vk::ShaderStageFlags::CLOSEST_HIT_KHR)];
+        let static_layout_bindings = [
+            vk::DescriptorSetLayoutBinding::default()
+                .binding(0)
+                .descriptor_type(vk::DescriptorType::ACCELERATION_STRUCTURE_KHR)
+                .descriptor_count(1)
+                .stage_flags(
+                    vk::ShaderStageFlags::RAYGEN_KHR | vk::ShaderStageFlags::CLOSEST_HIT_KHR,
+                ),
+            vk::DescriptorSetLayoutBinding::default()
+                .binding(1)
+                .descriptor_type(vk::DescriptorType::UNIFORM_BUFFER)
+                .descriptor_count(1)
+                .stage_flags(
+                    vk::ShaderStageFlags::CLOSEST_HIT_KHR
+                        | vk::ShaderStageFlags::MISS_KHR
+                        | vk::ShaderStageFlags::RAYGEN_KHR,
+                ),
+        ];
 
         let dynamic_layout_bindings = [vk::DescriptorSetLayoutBinding::default()
-            .binding(1)
-            .descriptor_type(vk::DescriptorType::STORAGE_IMAGE)
+            .binding(0)
+            .descriptor_type(vk::DescriptorType::STORAGE_BUFFER)
             .descriptor_count(1)
             .stage_flags(vk::ShaderStageFlags::RAYGEN_KHR)];
 
@@ -331,8 +369,9 @@ impl DescriptorSets {
         pipeline: &Pipeline,
         tlas: &Tlas,
         storage_images: &[ImageAndView],
+        scene_ubo: &Buffer,
     ) -> Result<Self> {
-        let set_count = storage_images.len() as u32;
+        let storage_image_count = storage_images.len() as u32;
 
         let pool_sizes = [
             vk::DescriptorPoolSize::default()
@@ -340,23 +379,31 @@ impl DescriptorSets {
                 .descriptor_count(1),
             vk::DescriptorPoolSize::default()
                 .ty(vk::DescriptorType::STORAGE_IMAGE)
-                .descriptor_count(set_count),
+                .descriptor_count(storage_image_count),
+            vk::DescriptorPoolSize::default()
+                .ty(vk::DescriptorType::UNIFORM_BUFFER)
+                .descriptor_count(1),
         ];
-        let pool = context.create_descriptor_pool(set_count + 1, &pool_sizes)?;
+        let pool = context.create_descriptor_pool(storage_image_count + 1, &pool_sizes)?;
 
         let static_set = pool.allocate_set(&pipeline.static_dsl)?;
-        let dynamic_sets = pool.allocate_sets(&pipeline.dynamic_dsl, set_count)?;
-
-        static_set.update(&[WriteDescriptorSet {
-            binding: 0,
-            kind: WriteDescriptorSetKind::AccelerationStructure {
-                acceleration_structure: &tlas.inner,
+        static_set.update(&[
+            WriteDescriptorSet {
+                binding: 0,
+                kind: WriteDescriptorSetKind::AccelerationStructure {
+                    acceleration_structure: &tlas.inner,
+                },
             },
-        }]);
+            WriteDescriptorSet {
+                binding: 1,
+                kind: WriteDescriptorSetKind::UniformBuffer { buffer: scene_ubo },
+            },
+        ]);
 
+        let dynamic_sets = pool.allocate_sets(&pipeline.dynamic_dsl, storage_image_count)?;
         dynamic_sets.iter().enumerate().for_each(|(index, set)| {
             set.update(&[WriteDescriptorSet {
-                binding: 1,
+                binding: 0,
                 kind: WriteDescriptorSetKind::StorageImage {
                     view: &storage_images[index].view,
                     layout: vk::ImageLayout::GENERAL,
